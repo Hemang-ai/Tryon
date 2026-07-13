@@ -224,7 +224,8 @@ export default function Home() {
         }
       },
     });
-    identity.renderButton(button, { theme: "outline", size: "large", shape: "rectangular", text: "continue_with", width: 430 });
+    const width = Math.floor(Math.max(200, Math.min(430, button.getBoundingClientRect().width || 430)));
+    identity.renderButton(button, { theme: "outline", size: "large", shape: "rectangular", text: "continue_with", width });
   }, [googleClientId, googleConfigured, googleScriptReady, sessionLoading, user]);
 
   useEffect(() => {
@@ -366,7 +367,7 @@ export default function Home() {
 
   if (!user) return (
     <main className="login-screen">
-      <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onLoad={() => setGoogleScriptReady(true)} />
+      <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onReady={() => setGoogleScriptReady(true)} />
       <section className="login-panel">
         <div className="login-brand"><span className="brand-mark">T</span><strong>Try-it-on</strong></div>
         <div className="login-copy"><span className="eyebrow">Your personal fitting room</span><h1>See it on you.<br />Then decide.</h1><p>Upload one photo, choose a wearable, and preview the exact product and color on your body before you buy.</p></div>
