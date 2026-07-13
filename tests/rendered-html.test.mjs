@@ -90,7 +90,7 @@ test("protects generation and storage with verified Google and private test sess
 test("bundles a working demo product image for every category", async () => {
   const catalog = await source("../lib/catalog.ts");
   const assets = [
-    "essential-tee.webp", "tortoiseshell-glasses.jpg", "everyday-cap.jpg", "heritage-drops.jpg",
+    "essential-tee.jpg", "tortoiseshell-glasses.jpg", "everyday-cap.jpg", "heritage-drops.jpg",
     "minimal-watch.jpg", "heritage-carryall.jpg", "campus-runner.jpg",
   ];
   for (const asset of assets) {

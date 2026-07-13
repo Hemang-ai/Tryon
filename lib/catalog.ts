@@ -27,7 +27,7 @@ export const catalog: Record<CategoryId, CatalogProduct> = {
   clothes: {
     id: "essential-tee", category: "clothes", label: "Clothes", singular: "garment", name: "Essential tee",
     description: "Clean crew-neck silhouette", guidance: "Waist-up works for tops; use full body for dresses or trousers.",
-    imageUrl: "/assets/essential-tee.webp", creditUrl: "https://commons.wikimedia.org/wiki/File:T-shirt.webp", credit: "Clker-Free-Vector-Images", license: "CC0",
+    imageUrl: "/assets/essential-tee.jpg", creditUrl: "https://commons.wikimedia.org/wiki/File:T-shirt.webp", credit: "Clker-Free-Vector-Images", license: "CC0",
     variants: standardVariants,
   },
   eyewear: {
