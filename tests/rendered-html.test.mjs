@@ -29,20 +29,20 @@ test("ships a focused Google-gated dashboard with adaptive photos and real varia
 });
 
 test("protects generation and storage with verified Google OAuth", async () => {
-  const [tryOn, auth, authStart, authCallback, session, looks, deleteLook, schema] = await Promise.all([
+  const [tryOn, auth, credentialAuth, session, looks, deleteLook, schema] = await Promise.all([
     source("../app/api/try-on/route.ts"),
     source("../lib/google-auth.ts"),
-    source("../app/api/auth/google/start/route.ts"),
-    source("../app/api/auth/google/callback/route.ts"),
+    source("../app/api/auth/google/credential/route.ts"),
     source("../app/api/auth/session/route.ts"),
     source("../app/api/looks/route.ts"),
     source("../app/api/looks/[id]/route.ts"),
     source("../db/schema.ts"),
   ]);
-  assert.match(authStart, /code_challenge_method/);
-  assert.match(authStart, /openid email profile/);
-  assert.match(authCallback, /verifyGoogleIdToken/);
-  assert.match(authCallback, /claims\.email_verified/);
+  assert.match(credentialAuth, /verifyGoogleIdToken/);
+  assert.match(credentialAuth, /claims\.email_verified/);
+  assert.match(credentialAuth, /request\.headers\.get\("origin"\)/);
+  assert.match(credentialAuth, /claims\.aud !== env\.GOOGLE_CLIENT_ID/);
+  assert.match(credentialAuth, /SESSION_COOKIE/);
   assert.match(auth, /httpOnly|SESSION_COOKIE/);
   assert.match(session, /googleConfigured/);
   assert.match(tryOn, /getGoogleUser/);

@@ -6,6 +6,7 @@ export const runtime = "edge";
 export async function GET() {
   return NextResponse.json({
     user: await getGoogleUser(),
-    googleConfigured: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.AUTH_SECRET),
+    googleConfigured: Boolean(env.GOOGLE_CLIENT_ID && env.AUTH_SECRET),
+    googleClientId: env.GOOGLE_CLIENT_ID || null,
   });
 }

@@ -36,4 +36,4 @@ The eyewear test initially exposed a request-size failure. Its 1.9 MB PNG was re
 
 ## Remaining launch gate
 
-The production site remains owner-only until a real Google OAuth Web client is configured and the browser redirect/login/logout flow is verified using the production callback URL. No synthetic production session was used.
+The production site remains owner-only until the Google Identity Services Web client is configured and the real browser login/logout flow is verified. No synthetic production session was used.

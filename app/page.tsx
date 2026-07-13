@@ -6,12 +6,23 @@ import {
   UploadSimple, User, Watch, X,
 } from "@phosphor-icons/react";
 import Image from "next/image";
+import Script from "next/script";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { catalog, categoryIds, type CategoryId, type ProductVariant } from "@/lib/catalog";
 
 type PhotoMode = "half" | "full";
 type AccountUser = { id: string; email: string; name: string; picture?: string | null };
 type Look = { id: string; category: string; variantName: string; variantHex?: string | null; createdAt: string; imageUrl: string };
+type GoogleCredentialResponse = { credential: string };
+
+declare global {
+  interface Window {
+    google?: { accounts: { id: {
+      initialize: (options: { client_id: string; callback: (response: GoogleCredentialResponse) => void; auto_select?: boolean }) => void;
+      renderButton: (element: HTMLElement, options: { theme: string; size: string; shape: string; text: string; width: number }) => void;
+    } } };
+  }
+}
 
 const categoryIcons = {
   clothes: TShirt, eyewear: Eyeglasses, headwear: CoatHanger, jewelry: Sparkle,
@@ -135,6 +146,9 @@ async function urlToFile(url: string, filename: string) {
 export default function Home() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [googleConfigured, setGoogleConfigured] = useState(true);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [googleScriptReady, setGoogleScriptReady] = useState(false);
+  const [googleSigningIn, setGoogleSigningIn] = useState(false);
   const [user, setUser] = useState<AccountUser | null>(null);
   const [categoryId, setCategoryId] = useState<CategoryId>("clothes");
   const [selectedVariant, setSelectedVariant] = useState(0);
@@ -157,6 +171,7 @@ export default function Home() {
   const [looks, setLooks] = useState<Look[]>([]);
   const personInput = useRef<HTMLInputElement>(null);
   const productInput = useRef<HTMLInputElement>(null);
+  const googleButton = useRef<HTMLDivElement>(null);
   const personObjectUrl = useRef<string | null>(null);
   const productObjectUrl = useRef<string | null>(null);
 
@@ -171,14 +186,46 @@ export default function Home() {
   useEffect(() => {
     const auth = new URLSearchParams(window.location.search).get("auth");
     if (auth) window.history.replaceState({}, "", window.location.pathname);
-    fetch("/api/auth/session").then((response) => response.json()).then((data: { user?: AccountUser; googleConfigured?: boolean }) => {
+    fetch("/api/auth/session").then((response) => response.json()).then((data: { user?: AccountUser; googleConfigured?: boolean; googleClientId?: string | null }) => {
       setUser(data.user ?? null);
       setGoogleConfigured(Boolean(data.googleConfigured));
+      setGoogleClientId(data.googleClientId ?? null);
       if (data.user) void loadLooks();
       if (auth === "failed") setNotice("Google sign-in could not be completed. Please try again.");
       if (auth === "setup") setNotice("Google sign-in is being configured.");
     }).catch(() => setNotice("Your session could not be checked.")).finally(() => setSessionLoading(false));
   }, []);
+
+  useEffect(() => {
+    const button = googleButton.current;
+    const identity = window.google?.accounts.id;
+    if (sessionLoading || user || !googleConfigured || !googleClientId || !googleScriptReady || !button || !identity) return;
+    button.replaceChildren();
+    identity.initialize({
+      client_id: googleClientId,
+      auto_select: false,
+      callback: async ({ credential }) => {
+        setGoogleSigningIn(true);
+        setNotice(null);
+        try {
+          const response = await fetch("/api/auth/google/credential", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ credential }),
+          });
+          const data = await response.json() as { user?: AccountUser; error?: string };
+          if (!response.ok || !data.user) throw new Error(data.error || "Google sign-in could not be completed.");
+          setUser(data.user);
+          await loadLooks();
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "Google sign-in could not be completed.");
+        } finally {
+          setGoogleSigningIn(false);
+        }
+      },
+    });
+    identity.renderButton(button, { theme: "outline", size: "large", shape: "rectangular", text: "continue_with", width: 430 });
+  }, [googleClientId, googleConfigured, googleScriptReady, sessionLoading, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,10 +366,11 @@ export default function Home() {
 
   if (!user) return (
     <main className="login-screen">
+      <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onLoad={() => setGoogleScriptReady(true)} />
       <section className="login-panel">
         <div className="login-brand"><span className="brand-mark">T</span><strong>Try-it-on</strong></div>
         <div className="login-copy"><span className="eyebrow">Your personal fitting room</span><h1>See it on you.<br />Then decide.</h1><p>Upload one photo, choose a wearable, and preview the exact product and color on your body before you buy.</p></div>
-        <a className={googleConfigured ? "google-login" : "google-login disabled"} href={googleConfigured ? "/api/auth/google/start" : "#"} aria-disabled={!googleConfigured}><span>G</span> Continue with Google</a>
+        <div className={`google-login-slot${googleSigningIn ? " signing-in" : ""}`} ref={googleButton} aria-label="Continue with Google">{googleSigningIn ? "Signing you in…" : googleConfigured ? "Loading secure Google sign-in…" : "Google sign-in unavailable"}</div>
         {!googleConfigured && <p className="login-setup">Google sign-in is awaiting its production client credentials.</p>}
         <div className="login-trust"><span><LockKey size={17} /> Photos stay private</span><span><ShieldCheck size={17} /> Delete saved looks anytime</span></div>
         <p className="login-legal">AI previews help with style decisions, not physical size or fit guarantees.</p>

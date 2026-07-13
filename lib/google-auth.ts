@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { cookies } from "next/headers";
 
 export const SESSION_COOKIE = "tryiton_session";
-export const OAUTH_COOKIE = "tryiton_oauth";
 
 export type GoogleUser = {
   id: string;
@@ -92,14 +91,4 @@ export async function verifyGoogleIdToken(token: string) {
   } catch {
     return null;
   }
-}
-
-export function randomUrlSafe(bytes = 32) {
-  const value = new Uint8Array(bytes);
-  crypto.getRandomValues(value);
-  return base64Url(value);
-}
-
-export async function sha256UrlSafe(value: string) {
-  return base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
 }
