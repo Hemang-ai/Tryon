@@ -88,7 +88,6 @@ export async function POST(request: Request) {
           mime_type: "image/jpeg",
           aspect_ratio: "3:4",
           image_size: "1K",
-          delivery: "inline",
         },
         generation_config: { thinking_level: "high" },
         store: false,

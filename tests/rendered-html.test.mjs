@@ -16,6 +16,7 @@ test("ships the adaptive Try-it-on experience without a fake overlay", async () 
   assert.match(page, /Half body/);
   assert.match(page, /Full body/);
   assert.match(page, /normalizePerson/);
+  assert.match(page, /normalizeProduct/);
   assert.match(page, /category\.fullBody/);
   assert.doesNotMatch(page, /wearable-overlay|overlay preview/);
   assert.match(css, /photo-fit-panel/);

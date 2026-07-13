@@ -66,6 +66,23 @@ async function normalizePerson(file: File, mode: PhotoMode, zoom: number, vertic
   return new File([blob], "try-it-on-person.jpg", { type: "image/jpeg" });
 }
 
+async function normalizeProduct(file: File) {
+  const image = await imageFromFile(file);
+  const maxEdge = 1280;
+  const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Your browser could not prepare the product photo.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", .9));
+  if (!blob) throw new Error("Your browser could not prepare the product photo.");
+  return new File([blob], "try-it-on-product.jpg", { type: "image/jpeg" });
+}
+
 async function urlToFile(url: string, filename: string) {
   const response = await fetch(url);
   if (!response.ok) throw new Error("The result image could not be saved.");
@@ -190,9 +207,12 @@ export default function Home() {
     }
     setProcessing(true); setNotice("Adapting the photo and placing the product naturally…");
     try {
-      const prepared = await normalizePerson(personFile, photoMode, photoZoom, photoPosition);
+      const [prepared, preparedProduct] = await Promise.all([
+        normalizePerson(personFile, photoMode, photoZoom, photoPosition),
+        normalizeProduct(productFile),
+      ]);
       const data = new FormData();
-      data.append("person", prepared); data.append("product", productFile); data.append("category", categoryId);
+      data.append("person", prepared); data.append("product", preparedProduct); data.append("category", categoryId);
       const response = await fetch("/api/try-on", { method: "POST", body: data });
       const payload = (await response.json()) as { resultUrl?: string; error?: string };
       if (!response.ok || !payload.resultUrl) throw new Error(payload.error ?? "No preview was returned.");
@@ -210,10 +230,13 @@ export default function Home() {
       setNotice("Create a personal try-on first, then save it to your account."); return;
     }
     try {
-      const prepared = await normalizePerson(personFile, photoMode, photoZoom, photoPosition);
+      const [prepared, preparedProduct] = await Promise.all([
+        normalizePerson(personFile, photoMode, photoZoom, photoPosition),
+        normalizeProduct(productFile),
+      ]);
       const result = await urlToFile(resultUrl, "try-it-on-result.jpg");
       const data = new FormData();
-      data.append("person", prepared); data.append("product", productFile); data.append("result", result); data.append("category", categoryId);
+      data.append("person", prepared); data.append("product", preparedProduct); data.append("result", result); data.append("category", categoryId);
       const response = await fetch("/api/looks", { method: "POST", body: data });
       if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? "This look could not be saved.");
       setSaved(true); setNotice("Saved to your Try-it-on account."); await loadLooks();
