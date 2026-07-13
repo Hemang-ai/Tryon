@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
+import { getGoogleUser } from "@/lib/google-auth";
 
 export const runtime = "edge";
 
@@ -26,7 +27,7 @@ async function fileToBase64(file: File) {
   return btoa(binary);
 }
 
-function promptFor(category: string) {
+function promptFor(category: string, variantName: string, variantHex: string | null) {
   const placement: Record<string, string> = {
     clothes: "Dress the person in the exact supplied garment with physically believable fit, drape, folds, seams, scale, and body occlusion.",
     eyewear: "Place the exact supplied eyewear precisely on the bridge of the person's nose and behind both ears with realistic lens reflections, perspective, and shadows.",
@@ -36,7 +37,10 @@ function promptFor(category: string) {
     bags: "Place the exact supplied bag naturally on the person with realistic straps, scale, hand and body occlusion, perspective, and shadows.",
     shoes: "Put the exact supplied footwear on both visible feet with correct perspective, grounding, scale, foot orientation, and shadows.",
   };
-  return `Create one photorealistic virtual try-on image. Image 1 is the source person and must remain the composition and identity reference. Image 2 is the product reference and must remain the exact product design. ${placement[category] ?? "Place the exact supplied wearable naturally on the correct part of the body."}
+  const variantInstruction = variantHex
+    ? `Recolor only the product material to the selected ${variantName} color (${variantHex}), preserving its texture, highlights, shadows, logos, hardware, construction, and every non-color detail.`
+    : "Keep the product's original color exactly as supplied.";
+  return `Create one photorealistic virtual try-on image. Image 1 is the source person and must remain the composition and identity reference. Image 2 is the product reference and must remain the exact product design. ${placement[category] ?? "Place the exact supplied wearable naturally on the correct part of the body."} ${variantInstruction}
 
 NON-NEGOTIABLE PRESERVATION RULES:
 - Preserve the person's exact face, identity, age, expression, skin tone, body proportions, pose, hands, hair, and original background from Image 1.
@@ -57,6 +61,7 @@ function findGeneratedImage(interaction: GeminiInteraction) {
 }
 
 export async function POST(request: Request) {
+  if (!(await getGoogleUser())) return NextResponse.json({ error: "Sign in with Google to create a try-on." }, { status: 401 });
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -69,6 +74,9 @@ export async function POST(request: Request) {
   const person = data.get("person");
   const product = data.get("product");
   const category = String(data.get("category") ?? "clothes");
+  const variantName = String(data.get("variantName") ?? "Original").replace(/[^\w -]/g, "").slice(0, 32) || "Original";
+  const requestedHex = String(data.get("variantHex") ?? "");
+  const variantHex = /^#[0-9a-fA-F]{6}$/.test(requestedHex) ? requestedHex : null;
   if (!(person instanceof File) || !(product instanceof File)) {
     return NextResponse.json({ error: "Both person and product images are required." }, { status: 400 });
   }
@@ -84,7 +92,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image",
         input: [
-          { type: "text", text: promptFor(category) },
+          { type: "text", text: promptFor(category, variantName, variantHex) },
           { type: "image", mime_type: person.type, data: personData },
           { type: "image", mime_type: product.type, data: productData },
         ],

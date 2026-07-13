@@ -8,6 +8,13 @@
       "when": 1783954005641,
       "tag": "0000_futuristic_shinobi_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1783969149329,
+      "tag": "0001_cute_princess_powerful",
+      "breakpoints": true
     }
   ]
 }

@@ -1,21 +1,22 @@
 import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/authenticated-user";
+import { getGoogleUser } from "@/lib/google-auth";
 
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const user = await getAuthenticatedUser(request);
+  void request;
+  const user = await getGoogleUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!env.DB) return NextResponse.json({ looks: [] });
 
-  const result = await env.DB.prepare(`SELECT id, category, created_at AS createdAt FROM try_on_looks WHERE user_id = ? ORDER BY created_at DESC LIMIT 12`).bind(user.id).all();
+  const result = await env.DB.prepare(`SELECT id, category, variant_name AS variantName, variant_hex AS variantHex, created_at AS createdAt FROM try_on_looks WHERE user_id = ? ORDER BY created_at DESC LIMIT 12`).bind(user.id).all();
   const looks = (result.results ?? []).map((look) => ({ ...look, imageUrl: `/api/looks/${look.id}/image` }));
   return NextResponse.json({ looks });
 }
 
 export async function POST(request: Request) {
-  const user = await getAuthenticatedUser(request);
+  const user = await getGoogleUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!env.DB || !env.BUCKET) return NextResponse.json({ error: "Account storage is not configured." }, { status: 503 });
 
@@ -24,6 +25,9 @@ export async function POST(request: Request) {
   const product = data.get("product");
   const result = data.get("result");
   const category = String(data.get("category") ?? "clothes");
+  const variantName = String(data.get("variantName") ?? "Original").slice(0, 32);
+  const requestedHex = String(data.get("variantHex") ?? "");
+  const variantHex = /^#[0-9a-fA-F]{6}$/.test(requestedHex) ? requestedHex : null;
   if (!(person instanceof File) || !(product instanceof File) || !(result instanceof File)) {
     return NextResponse.json({ error: "Person, product, and result images are required." }, { status: 400 });
   }
@@ -44,7 +48,7 @@ export async function POST(request: Request) {
     env.BUCKET.put(resultKey, await result.arrayBuffer(), { httpMetadata: { contentType: result.type } }),
   ]);
   const createdAt = timestamp;
-  await env.DB.prepare(`INSERT INTO try_on_looks (id, user_id, category, person_key, product_key, result_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, user.id, category, personKey, productKey, resultKey, createdAt).run();
+  await env.DB.prepare(`INSERT INTO try_on_looks (id, user_id, category, variant_name, variant_hex, person_key, product_key, result_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, user.id, category, variantName, variantHex, personKey, productKey, resultKey, createdAt).run();
 
-  return NextResponse.json({ look: { id, category, createdAt, imageUrl: `/api/looks/${id}/image` } }, { status: 201 });
+  return NextResponse.json({ look: { id, category, variantName, variantHex, createdAt, imageUrl: `/api/looks/${id}/image` } }, { status: 201 });
 }

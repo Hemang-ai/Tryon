@@ -15,6 +15,8 @@ export const tryOnLooks = sqliteTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     category: text("category").notNull(),
+    variantName: text("variant_name").notNull().default("Original"),
+    variantHex: text("variant_hex"),
     personKey: text("person_key").notNull(),
     productKey: text("product_key").notNull(),
     resultKey: text("result_key").notNull(),

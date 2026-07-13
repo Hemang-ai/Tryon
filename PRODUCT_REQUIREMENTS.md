@@ -67,7 +67,7 @@ Each category must provide its own photo framing guidance, product-image require
 - Placement: strict per-category prompts preserve person identity and product fidelity while specifying anatomical placement, occlusion, scale, perspective, lighting, reflections, and contact shadows.
 - Privacy: send `store=false` on every Gemini interaction so uploaded customer images are not retained as Interaction objects.
 - Storage: short-lived encrypted object storage with lifecycle deletion; store only processing metadata and derived quality signals long-term.
-- Identity: use the hosting platform's authenticated ChatGPT user headers for personal saved looks; do not maintain a second OAuth client, password store, or app-owned session cookie.
+- Identity: require Google OAuth before the dashboard or any generation/storage API is available. Use authorization-code flow with PKCE, verified ID-token signatures, short-lived state/nonce cookies, and a signed HTTP-only application session.
 - Queue: asynchronous jobs with idempotency, retries, timeout handling, and provider fallback.
 - Observability: latency, generation failure, identity drift, product fidelity, retry rate, save rate, and downstream conversion.
 
