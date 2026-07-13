@@ -13,24 +13,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://mirra.style"),
-  title: "MIRRA — See it on you",
+  metadataBase: new URL("https://mirra-virtual-try-on.databackup123.chatgpt.site"),
+  title: "Try-it-on — Your personal fitting room",
   description: "A private, category-aware virtual fitting room for clothes, eyewear, jewelry, hats, watches, bags, and shoes.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
   openGraph: {
-    title: "MIRRA — See it on you",
+    title: "Try-it-on — Your personal fitting room",
     description: "Upload your photo, select a wearable, and preview your look with confidence.",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "MIRRA virtual try-on studio" }],
+    images: [{ url: "/try-it-on-og.png", width: 1200, height: 630, alt: "Try-it-on virtual fitting room" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "MIRRA — See it on you",
+    title: "Try-it-on — Your personal fitting room",
     description: "A private, adaptive virtual fitting room for every wearable category.",
-    images: ["/og.png"],
+    images: ["/try-it-on-og.png"],
   },
 };
 
