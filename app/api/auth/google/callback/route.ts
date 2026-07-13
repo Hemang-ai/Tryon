@@ -20,9 +20,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/?auth=failed", request.url));
   }
 
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  if (!clientId || !clientSecret || !process.env.AUTH_SECRET) return NextResponse.redirect(new URL("/?auth=setup", request.url));
+  const clientId = env.GOOGLE_CLIENT_ID;
+  const clientSecret = env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret || !env.AUTH_SECRET) return NextResponse.redirect(new URL("/?auth=setup", request.url));
 
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",

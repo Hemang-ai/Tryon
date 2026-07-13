@@ -1,11 +1,12 @@
+import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
 import { OAUTH_COOKIE, randomUrlSafe, sha256UrlSafe } from "@/lib/google-auth";
 
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const secret = process.env.AUTH_SECRET;
+  const clientId = env.GOOGLE_CLIENT_ID;
+  const secret = env.AUTH_SECRET;
   if (!clientId || !secret) return NextResponse.redirect(new URL("/?auth=setup", request.url));
 
   const state = randomUrlSafe(24);

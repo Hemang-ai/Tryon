@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { cookies } from "next/headers";
 
 export const SESSION_COOKIE = "tryiton_session";
@@ -51,14 +52,14 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 export async function createSessionToken(user: GoogleUser): Promise<string> {
-  const secret = process.env.AUTH_SECRET;
+  const secret = env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET is not configured");
   const payload = encodeJson({ ...user, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 });
   return `${payload}.${await sign(payload, secret)}`;
 }
 
 export async function readSessionToken(token: string | undefined): Promise<GoogleUser | null> {
-  const secret = process.env.AUTH_SECRET;
+  const secret = env.AUTH_SECRET;
   if (!token || !secret) return null;
   const [payload, signature] = token.split(".");
   if (!payload || !signature || !constantTimeEqual(signature, await sign(payload, secret))) return null;
