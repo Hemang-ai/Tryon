@@ -66,5 +66,5 @@ test("provides an allowlisted demo product image for every remote category", asy
     assert.match(route, new RegExp(`${category}:`));
   }
   assert.match(route, /Cache-Control/);
-  assert.match(catalog, /assets\/tortoiseshell-glasses\.png/);
+  assert.match(catalog, /assets\/tortoiseshell-glasses\.jpg/);
 });

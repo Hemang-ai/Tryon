@@ -33,7 +33,7 @@ export const catalog: Record<CategoryId, CatalogProduct> = {
   eyewear: {
     id: "nrw-04", category: "eyewear", label: "Eyewear", singular: "pair of glasses", name: "NRW 04",
     description: "Sculpted oval sunglasses", guidance: "Face the camera with your eyes, nose, and ears visible.",
-    imageUrl: "/assets/tortoiseshell-glasses.png", creditUrl: "#", credit: "Try-it-on", license: "Original demo asset",
+    imageUrl: "/assets/tortoiseshell-glasses.jpg", creditUrl: "#", credit: "Try-it-on", license: "Original demo asset",
     variants: [{ name: "Tortoiseshell", hex: null }, { name: "Onyx", hex: "#1f2024" }, { name: "Cherry", hex: "#7b2430" }, { name: "Forest", hex: "#294d3f" }],
   },
   headwear: {
