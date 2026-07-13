@@ -107,7 +107,6 @@ export default function Home() {
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [user, setUser] = useState<AccountUser | null>(null);
-  const [googleConfigured, setGoogleConfigured] = useState(true);
   const [accountOpen, setAccountOpen] = useState(false);
   const [looks, setLooks] = useState<Look[]>([]);
   const personInput = useRef<HTMLInputElement>(null);
@@ -127,18 +126,10 @@ export default function Home() {
   } : undefined;
 
   useEffect(() => {
-    const auth = new URLSearchParams(window.location.search).get("auth");
-    if (auth) window.history.replaceState({}, "", window.location.pathname);
-    fetch("/api/auth/session").then((response) => response.json()).then((data: { user?: AccountUser; googleConfigured?: boolean }) => {
+    fetch("/api/auth/session").then((response) => response.json()).then((data: { user?: AccountUser }) => {
       setUser(data.user ?? null);
-      setGoogleConfigured(Boolean(data.googleConfigured));
       if (data.user) loadLooks();
-      if (auth === "setup") setNotice("Google sign-in needs its client credentials before it can go live.");
-      if (auth === "failed") setNotice("Google sign-in could not be completed. Please try again.");
-    }).catch(() => {
-      setGoogleConfigured(false);
-      if (auth) setNotice("Google sign-in could not be completed. Please try again.");
-    });
+    }).catch(() => setUser(null));
   }, []);
 
   useEffect(() => () => {
@@ -225,7 +216,7 @@ export default function Home() {
   }
 
   async function saveLook() {
-    if (!user) { setAccountOpen(true); setNotice("Sign in with Google to keep looks in your personal account."); return; }
+    if (!user) { setAccountOpen(true); setNotice("Sign in with ChatGPT to keep looks in your personal account."); return; }
     if (!generated || !resultUrl || !personFile || !productFile) {
       setNotice("Create a personal try-on first, then save it to your account."); return;
     }
@@ -324,11 +315,10 @@ export default function Home() {
             <button className="account-new" onClick={() => { reset(); setAccountOpen(false); }}><Plus size={18} /> Create a new look</button>
             <div className="recent-head"><strong>Recent looks</strong><span>{looks.length} saved</span></div>
             {looks.length ? <div className="recent-grid">{looks.map((look) => <button key={look.id} onClick={() => { setResultUrl(look.imageUrl); setGenerated(true); setCompare(0); setAccountOpen(false); }}><Image src={look.imageUrl} alt={`Saved ${look.category} try-on`} width={180} height={230} unoptimized /><span>{look.category}</span></button>)}</div> : <div className="empty-looks"><Heart size={28} /><p>Your saved looks will appear here.</p></div>}
-            <a className="sign-out" href="/api/auth/logout"><SignOut size={18} /> Sign out</a>
+            <a className="sign-out" href="/signout-with-chatgpt?return_to=/"><SignOut size={18} /> Sign out</a>
           </> : <>
             <div className="account-intro"><span><Sparkle size={23} /></span><small>Personal fitting room</small><h2>Your looks, all in one place.</h2><p>Sign in to save realistic previews, compare products, and return to your favorites on any device.</p></div>
-            <a className="google-button" href="/api/auth/google/start"><b>G</b> Continue with Google</a>
-            {!googleConfigured && <p className="setup-note"><Info size={17} /> Google login is built and needs production credentials to activate.</p>}
+            <a className="google-button" href="/signin-with-chatgpt?return_to=/"><Sparkle size={19} /> Continue with ChatGPT</a>
             <p className="account-privacy"><LockKey size={16} /> We only store a photo when you choose Save for later.</p>
           </>}
         </aside>

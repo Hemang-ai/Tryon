@@ -1,11 +1,11 @@
 import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
-import { getGoogleUser } from "@/lib/google-auth";
+import { getAuthenticatedUser } from "@/lib/authenticated-user";
 
 export const runtime = "edge";
 
-export async function GET() {
-  const user = await getGoogleUser();
+export async function GET(request: Request) {
+  const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!env.DB) return NextResponse.json({ looks: [] });
 
@@ -15,7 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await getGoogleUser();
+  const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!env.DB || !env.BUCKET) return NextResponse.json({ error: "Account storage is not configured." }, { status: 503 });
 
@@ -36,12 +36,14 @@ export async function POST(request: Request) {
   const personKey = `${prefix}/person`;
   const productKey = `${prefix}/product`;
   const resultKey = `${prefix}/result`;
+  const timestamp = new Date().toISOString();
+  await env.DB.prepare(`INSERT INTO users (id, email, name, picture_url, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET email = excluded.email, name = excluded.name, last_login_at = excluded.last_login_at`).bind(user.id, user.email, user.name, user.picture, timestamp, timestamp).run();
   await Promise.all([
     env.BUCKET.put(personKey, await person.arrayBuffer(), { httpMetadata: { contentType: person.type } }),
     env.BUCKET.put(productKey, await product.arrayBuffer(), { httpMetadata: { contentType: product.type } }),
     env.BUCKET.put(resultKey, await result.arrayBuffer(), { httpMetadata: { contentType: result.type } }),
   ]);
-  const createdAt = new Date().toISOString();
+  const createdAt = timestamp;
   await env.DB.prepare(`INSERT INTO try_on_looks (id, user_id, category, person_key, product_key, result_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, user.id, category, personKey, productKey, resultKey, createdAt).run();
 
   return NextResponse.json({ look: { id, category, createdAt, imageUrl: `/api/looks/${id}/image` } }, { status: 201 });

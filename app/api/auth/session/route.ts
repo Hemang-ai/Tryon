@@ -1,8 +1,7 @@
-import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
-import { getGoogleUser } from "@/lib/google-auth";
+import { getAuthenticatedUser } from "@/lib/authenticated-user";
 
 export const runtime = "edge";
-export async function GET() {
-  return NextResponse.json({ user: await getGoogleUser(), googleConfigured: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.AUTH_SECRET) });
+export async function GET(request: Request) {
+  return NextResponse.json({ user: await getAuthenticatedUser(request) });
 }

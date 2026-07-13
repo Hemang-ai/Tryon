@@ -23,13 +23,14 @@ test("ships the adaptive Try-it-on experience without a fake overlay", async () 
   assert.match(css, /account-drawer/);
 });
 
-test("connects Google-native realistic generation, Google auth, and private saved looks", async () => {
-  const [tryOn, authStart, authCallback, looks, schema] = await Promise.all([
+test("connects Google-native generation, native account identity, and private saved looks", async () => {
+  const [tryOn, auth, session, looks, schema, page] = await Promise.all([
     source("../app/api/try-on/route.ts"),
-    source("../app/api/auth/google/start/route.ts"),
-    source("../app/api/auth/google/callback/route.ts"),
+    source("../lib/authenticated-user.ts"),
+    source("../app/api/auth/session/route.ts"),
     source("../app/api/looks/route.ts"),
     source("../db/schema.ts"),
+    source("../app/page.tsx"),
   ]);
 
   assert.match(tryOn, /gemini-3\.1-flash-image/);
@@ -38,8 +39,10 @@ test("connects Google-native realistic generation, Google auth, and private save
   assert.match(tryOn, /TRY_ON_CAPACITY_UNAVAILABLE/);
   assert.match(tryOn, /Retry-After/);
   assert.doesNotMatch(tryOn, /FASHN|fashn/i);
-  assert.match(authStart, /code_challenge_method/);
-  assert.match(authCallback, /verifyGoogleIdToken/);
+  assert.match(auth, /oai-authenticated-user-email/);
+  assert.match(auth, /oai-authenticated-user-full-name/);
+  assert.match(session, /getAuthenticatedUser/);
+  assert.match(page, /signin-with-chatgpt/);
   assert.match(looks, /Sign in required/);
   assert.match(looks, /env\.BUCKET\.put/);
   assert.match(schema, /try_on_looks/);
