@@ -22,7 +22,7 @@ test("ships the adaptive Try-it-on experience without a fake overlay", async () 
   assert.match(css, /account-drawer/);
 });
 
-test("connects realistic generation, Google auth, and private saved looks", async () => {
+test("connects Google-native realistic generation, Google auth, and private saved looks", async () => {
   const [tryOn, authStart, authCallback, looks, schema] = await Promise.all([
     source("../app/api/try-on/route.ts"),
     source("../app/api/auth/google/start/route.ts"),
@@ -31,8 +31,10 @@ test("connects realistic generation, Google auth, and private saved looks", asyn
     source("../db/schema.ts"),
   ]);
 
-  assert.match(tryOn, /model_name: "tryon-max"/);
-  assert.match(tryOn, /return_base64: true/);
+  assert.match(tryOn, /gemini-3\.1-flash-image/);
+  assert.match(tryOn, /generativelanguage\.googleapis\.com\/v1beta\/interactions/);
+  assert.match(tryOn, /store: false/);
+  assert.doesNotMatch(tryOn, /FASHN|fashn/i);
   assert.match(authStart, /code_challenge_method/);
   assert.match(authCallback, /verifyGoogleIdToken/);
   assert.match(looks, /Sign in required/);

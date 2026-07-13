@@ -1,8 +1,8 @@
-# MIRRA Product Requirements
+# Try-it-on Product Requirements
 
 ## Product thesis
 
-MIRRA helps online shoppers answer “does this suit me?” before they buy. It accepts half-body and full-body photos, adapts guidance and placement to the selected wearable category, and clearly separates style visualization from exact size or fit prediction.
+Try-it-on helps online shoppers answer “does this suit me?” before they buy. It accepts half-body and full-body photos, adapts guidance and placement to the selected wearable category, and clearly separates style visualization from exact size or fit prediction.
 
 ## Customer problem
 
@@ -29,10 +29,10 @@ Each category must provide its own photo framing guidance, product-image require
 ## Primary journey
 
 1. Shopper chooses a wearable category.
-2. MIRRA explains whether a face, half-body, wrist/hand, or full-body photo works best.
+2. Try-it-on explains whether a face, half-body, wrist/hand, or full-body photo works best.
 3. Shopper uploads their photo or continues with the sample.
 4. Shopper selects a catalog item or uploads a product photo.
-5. MIRRA validates file type, size, visibility, lighting, pose, and likely occlusions.
+5. Try-it-on validates file type, size, visibility, lighting, pose, and likely occlusions.
 6. Shopper generates a preview and sees an honest progress state.
 7. Result opens with a before/after scrubber, confidence cues, and a “style preview—not an exact sizing guarantee” disclaimer.
 8. Shopper can save, retry, replace either image, or continue to a retailer.
@@ -44,7 +44,7 @@ Each category must provide its own photo framing guidance, product-image require
 - Detect photo framing and route it to the selected category workflow.
 - Preserve the person’s identity, body proportions, pose, skin tone, and background.
 - Preserve the product’s color, silhouette, texture, logos, and key details.
-- Offer category-specific engines rather than promising one model is equally accurate for every wearable.
+- Use category-specific placement instructions and photo requirements while keeping one maintainable Google-native image engine.
 - Return a result, actionable error, or retry path within 30 seconds; target under 8 seconds for face accessories.
 - Provide original/result comparison, retry, save, replace-photo, and replace-product actions.
 - Never imply the visualization proves physical size or comfort.
@@ -63,16 +63,16 @@ Each category must provide its own photo framing guidance, product-image require
 
 - Frontend: responsive Next.js/Vinext experience with client-side validation and instant local previews.
 - Orchestration API: accepts a person image, product image, category, and optional fit intent; validates and routes the request.
-- Clothes: garment-specialized VTO model such as Vertex AI Virtual Try-On, Amazon Nova Canvas VTO, or a licensed fashion provider.
-- Face/wrist accessories: landmark-based AR for instant placement, backed by a generative refinement pass for saved results.
-- Jewelry, hats, watches, bags, and shoes: use category-specific APIs or models with the correct landmark and occlusion handling.
+- Image generation: Google Gemini 3.1 Flash Image through the stateless Interactions API, receiving the normalized person and exact product as separate reference images.
+- Placement: strict per-category prompts preserve person identity and product fidelity while specifying anatomical placement, occlusion, scale, perspective, lighting, reflections, and contact shadows.
+- Privacy: send `store=false` on every Gemini interaction so uploaded customer images are not retained as Interaction objects.
 - Storage: short-lived encrypted object storage with lifecycle deletion; store only processing metadata and derived quality signals long-term.
 - Queue: asynchronous jobs with idempotency, retries, timeout handling, and provider fallback.
 - Observability: latency, generation failure, identity drift, product fidelity, retry rate, save rate, and downstream conversion.
 
 ## API contract
 
-`POST /api/try-on` receives multipart fields `person`, `product`, and `category`. The included implementation forwards these to a configured provider using `VTO_PROVIDER_URL` and `VTO_API_KEY`; without credentials, MIRRA runs in transparent local-preview mode.
+`POST /api/try-on` receives multipart fields `person`, `product`, and `category`. It sends both reference images to Google Gemini 3.1 Flash Image using the server-side `GEMINI_API_KEY`, requests a single 3:4 JPEG, and returns a private inline data URL. The API never returns a fake overlay when generation is unavailable.
 
 ## Success measures
 

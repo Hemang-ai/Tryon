@@ -3,42 +3,59 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-type FashnStatus = {
-  status?: "starting" | "in_queue" | "processing" | "completed" | "failed";
-  output?: string[];
-  error?: { message?: string } | string;
+type GeminiImage = { type?: string; data?: string; mime_type?: string; uri?: string };
+type GeminiStep = { type?: string; content?: GeminiImage[]; error?: { message?: string } };
+type GeminiInteraction = {
+  status?: string;
+  steps?: GeminiStep[];
+  error?: { message?: string };
 };
 
-function fileToDataUrl(file: File) {
-  return file.arrayBuffer().then((buffer) => {
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    const chunk = 0x8000;
-    for (let index = 0; index < bytes.length; index += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
-    }
-    return `data:${file.type};base64,${btoa(binary)}`;
-  });
+async function fileToBase64(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  return btoa(binary);
 }
 
 function promptFor(category: string) {
   const placement: Record<string, string> = {
-    clothes: "Dress the person in the supplied garment with physically believable drape, folds, scale, and occlusion.",
-    eyewear: "Place the supplied eyewear precisely on the bridge of the nose and behind the ears with realistic reflections and shadows.",
-    headwear: "Place the supplied hat naturally on the head with correct hair occlusion, scale, and shadows.",
-    jewelry: "Place the supplied jewelry on the anatomically correct visible area with realistic metal highlights and skin contact.",
-    watches: "Place the supplied watch securely around the most visible wrist with correct perspective, scale, and shadows.",
-    bags: "Place the supplied bag naturally on or beside the person with realistic straps, scale, hand/body occlusion, and shadows.",
-    shoes: "Put the supplied footwear on both visible feet with correct perspective, grounding, scale, and shadows.",
+    clothes: "Dress the person in the exact supplied garment with physically believable fit, drape, folds, seams, scale, and body occlusion.",
+    eyewear: "Place the exact supplied eyewear precisely on the bridge of the person's nose and behind both ears with realistic lens reflections, perspective, and shadows.",
+    headwear: "Place the exact supplied hat naturally on the person's head with correct hair occlusion, scale, perspective, and contact shadows.",
+    jewelry: "Place the exact supplied jewelry on the anatomically correct visible area with realistic metal or gemstone highlights, scale, and skin contact.",
+    watches: "Place the exact supplied watch securely around the most visible wrist with correct strap wrap, perspective, scale, and contact shadows.",
+    bags: "Place the exact supplied bag naturally on the person with realistic straps, scale, hand and body occlusion, perspective, and shadows.",
+    shoes: "Put the exact supplied footwear on both visible feet with correct perspective, grounding, scale, foot orientation, and shadows.",
   };
-  return `${placement[category] ?? "Place the supplied wearable naturally on the correct part of the body."} Preserve the person's face, identity, body proportions, pose, hands, hair, skin tone, and the original background. Preserve the exact product design, material, color, logo, and details. Produce a photorealistic ecommerce-quality result.`;
+  return `Create one photorealistic virtual try-on image. Image 1 is the source person and must remain the composition and identity reference. Image 2 is the product reference and must remain the exact product design. ${placement[category] ?? "Place the exact supplied wearable naturally on the correct part of the body."}
+
+NON-NEGOTIABLE PRESERVATION RULES:
+- Preserve the person's exact face, identity, age, expression, skin tone, body proportions, pose, hands, hair, and original background from Image 1.
+- Preserve the product's exact shape, construction, material, color, pattern, logo, hardware, and fine details from Image 2.
+- Change only what is necessary to make the person wear or carry the product.
+- Use anatomically correct placement, physically believable contact, occlusion, perspective, lighting, reflections, and shadows.
+- Do not beautify, reshape, retouch, crop out body parts, add accessories, replace the setting, or invent a different product.
+- Output only one polished ecommerce-quality photograph with no text, border, collage, labels, or watermark other than the model's standard provenance mark.`;
+}
+
+function findGeneratedImage(interaction: GeminiInteraction) {
+  for (const step of [...(interaction.steps ?? [])].reverse()) {
+    for (const content of [...(step.content ?? [])].reverse()) {
+      if (content.type === "image" && content.data) return content;
+    }
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
-  const apiKey = env.FASHN_API_KEY;
+  const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Realistic try-on is awaiting its FASHN API key. The sample experience is still available." },
+      { error: "Google Gemini image generation is not configured yet." },
       { status: 503 },
     );
   }
@@ -55,46 +72,46 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [modelImage, productImage] = await Promise.all([fileToDataUrl(person), fileToDataUrl(product)]);
-    const runResponse = await fetch("https://api.fashn.ai/v1/run", {
+    const [personData, productData] = await Promise.all([fileToBase64(person), fileToBase64(product)]);
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model_name: "tryon-max",
-        inputs: {
-          model_image: modelImage,
-          product_image: productImage,
-          prompt: promptFor(category),
-          resolution: "1k",
-          generation_mode: "balanced",
-          num_images: 1,
-          output_format: "jpeg",
-          return_base64: true,
+        model: env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image",
+        input: [
+          { type: "text", text: promptFor(category) },
+          { type: "image", mime_type: person.type, data: personData },
+          { type: "image", mime_type: product.type, data: productData },
+        ],
+        response_format: {
+          type: "image",
+          mime_type: "image/jpeg",
+          aspect_ratio: "3:4",
+          image_size: "1K",
+          delivery: "inline",
         },
+        generation_config: { thinking_level: "high" },
+        store: false,
       }),
     });
-    const run = (await runResponse.json()) as { id?: string; error?: { message?: string } | string };
-    if (!runResponse.ok || !run.id) {
-      const message = typeof run.error === "string" ? run.error : run.error?.message;
-      return NextResponse.json({ error: message ?? "The try-on engine could not start this preview." }, { status: 502 });
+    const interaction = (await response.json()) as GeminiInteraction;
+    if (!response.ok || interaction.status === "failed") {
+      const stepError = interaction.steps?.find((step) => step.error)?.error?.message;
+      return NextResponse.json(
+        { error: interaction.error?.message ?? stepError ?? "Google Gemini could not create this try-on." },
+        { status: response.status === 429 ? 429 : 502 },
+      );
     }
-
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const statusResponse = await fetch(`https://api.fashn.ai/v1/status/${run.id}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      const status = (await statusResponse.json()) as FashnStatus;
-      if (status.status === "completed" && status.output?.[0]) {
-        return NextResponse.json({ mode: "provider", resultUrl: status.output[0] });
-      }
-      if (status.status === "failed") {
-        const message = typeof status.error === "string" ? status.error : status.error?.message;
-        return NextResponse.json({ error: message ?? "The try-on engine could not complete this preview." }, { status: 502 });
-      }
+    const image = findGeneratedImage(interaction);
+    if (!image?.data) {
+      return NextResponse.json({ error: "Google Gemini returned no try-on image." }, { status: 502 });
     }
-    return NextResponse.json({ error: "The preview is taking longer than expected. Please try again." }, { status: 504 });
+    return NextResponse.json({
+      mode: "provider",
+      provider: "gemini",
+      resultUrl: `data:${image.mime_type ?? "image/jpeg"};base64,${image.data}`,
+    });
   } catch {
-    return NextResponse.json({ error: "The realistic try-on service could not be reached." }, { status: 502 });
+    return NextResponse.json({ error: "Google Gemini image generation could not be reached." }, { status: 502 });
   }
 }
