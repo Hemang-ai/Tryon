@@ -149,9 +149,12 @@ button { color: inherit; }
 .recent-head { display: flex; justify-content: space-between; margin: 30px 0 12px; }
 .recent-head span { color: var(--muted); font-size: 12px; }
 .recent-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.recent-grid button { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #1b1017; padding: 0; text-align: left; cursor: pointer; }
+.recent-card { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #1b1017; }
+.recent-grid .recent-open { width: 100%; border: 0; background: transparent; padding: 0; text-align: left; color: inherit; cursor: pointer; }
 .recent-grid img { width: 100%; aspect-ratio: .78; object-fit: cover; display: block; }
 .recent-grid span { display: block; padding: 9px; text-transform: capitalize; font-size: 11px; }
+.recent-grid .recent-delete { position: absolute; top: 7px; right: 7px; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.24); border-radius: 50%; color: white; background: rgba(18,9,14,.78); backdrop-filter: blur(8px); cursor: pointer; }
+.recent-grid .recent-delete:hover { color: #1a0f16; background: var(--lime); }
 .empty-looks { min-height: 170px; display: grid; place-content: center; justify-items: center; border: 1px dashed var(--line); border-radius: 10px; color: #8f7984; }
 .empty-looks p { margin: 9px 0 0; font-size: 13px; }
 .sign-out { margin-top: 24px; padding: 13px 0; display: flex; justify-content: center; gap: 8px; color: var(--muted); text-decoration: none; font-size: 13px; }

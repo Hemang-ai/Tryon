@@ -3,7 +3,7 @@
 import {
   ArrowCounterClockwise, Bag, Check, CloudArrowUp, CoatHanger, Eye, Eyeglasses,
   Handbag, Heart, Info, LockKey, MagicWand, Plus, ShieldCheck, SignOut, Sneaker,
-  Sparkle, TShirt, UploadSimple, User, Watch, X,
+  Sparkle, Trash, TShirt, UploadSimple, User, Watch, X,
 } from "@phosphor-icons/react";
 import Image from "next/image";
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -140,6 +140,16 @@ export default function Home() {
   async function loadLooks() {
     const response = await fetch("/api/looks");
     if (response.ok) setLooks(((await response.json()) as { looks: Look[] }).looks);
+  }
+
+  async function deleteLook(id: string) {
+    const response = await fetch(`/api/looks/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      setNotice("This saved look could not be deleted. Please try again.");
+      return;
+    }
+    setLooks((current) => current.filter((look) => look.id !== id));
+    setNotice("Saved look and its photos were deleted.");
   }
 
   async function loadFile(file: File, type: "person" | "product") {
@@ -314,7 +324,7 @@ export default function Home() {
             <div className="account-person">{user.picture ? <Image src={user.picture} alt="" width={62} height={62} unoptimized /> : <User size={25} />}<div><small>Your Try-it-on account</small><h2>{user.name}</h2><p>{user.email}</p></div></div>
             <button className="account-new" onClick={() => { reset(); setAccountOpen(false); }}><Plus size={18} /> Create a new look</button>
             <div className="recent-head"><strong>Recent looks</strong><span>{looks.length} saved</span></div>
-            {looks.length ? <div className="recent-grid">{looks.map((look) => <button key={look.id} onClick={() => { setResultUrl(look.imageUrl); setGenerated(true); setCompare(0); setAccountOpen(false); }}><Image src={look.imageUrl} alt={`Saved ${look.category} try-on`} width={180} height={230} unoptimized /><span>{look.category}</span></button>)}</div> : <div className="empty-looks"><Heart size={28} /><p>Your saved looks will appear here.</p></div>}
+            {looks.length ? <div className="recent-grid">{looks.map((look) => <div className="recent-card" key={look.id}><button className="recent-open" onClick={() => { setResultUrl(look.imageUrl); setGenerated(true); setCompare(0); setAccountOpen(false); }}><Image src={look.imageUrl} alt={`Saved ${look.category} try-on`} width={180} height={230} unoptimized /><span>{look.category}</span></button><button className="recent-delete" onClick={() => void deleteLook(look.id)} aria-label={`Delete saved ${look.category} look`}><Trash size={15} /></button></div>)}</div> : <div className="empty-looks"><Heart size={28} /><p>Your saved looks will appear here.</p></div>}
             <a className="sign-out" href="/signout-with-chatgpt?return_to=/"><SignOut size={18} /> Sign out</a>
           </> : <>
             <div className="account-intro"><span><Sparkle size={23} /></span><small>Personal fitting room</small><h2>Your looks, all in one place.</h2><p>Sign in to save realistic previews, compare products, and return to your favorites on any device.</p></div>

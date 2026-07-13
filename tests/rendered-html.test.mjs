@@ -24,11 +24,12 @@ test("ships the adaptive Try-it-on experience without a fake overlay", async () 
 });
 
 test("connects Google-native generation, native account identity, and private saved looks", async () => {
-  const [tryOn, auth, session, looks, schema, page] = await Promise.all([
+  const [tryOn, auth, session, looks, deleteLook, schema, page] = await Promise.all([
     source("../app/api/try-on/route.ts"),
     source("../lib/authenticated-user.ts"),
     source("../app/api/auth/session/route.ts"),
     source("../app/api/looks/route.ts"),
+    source("../app/api/looks/[id]/route.ts"),
     source("../db/schema.ts"),
     source("../app/page.tsx"),
   ]);
@@ -45,6 +46,9 @@ test("connects Google-native generation, native account identity, and private sa
   assert.match(page, /signin-with-chatgpt/);
   assert.match(looks, /Sign in required/);
   assert.match(looks, /env\.BUCKET\.put/);
+  assert.match(deleteLook, /env\.BUCKET\.delete/);
+  assert.match(deleteLook, /DELETE FROM try_on_looks/);
+  assert.match(page, /Saved look and its photos were deleted/);
   assert.match(schema, /try_on_looks/);
   assert.match(schema, /onDelete: "cascade"/);
 });
