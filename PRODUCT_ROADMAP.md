@@ -12,7 +12,7 @@ Help a shopper answer “does this suit me in this exact color?” in under one 
 
 ## Launch customer journey
 
-1. Sign in with Google.
+1. Authenticate. Private QA uses the clearly labeled Test Login; public launch uses Google Identity Services after its production origin is approved.
 2. Land on the Dashboard; no generation or personal storage API is available before authentication.
 3. Choose one of seven wearable categories and start with a working example product.
 4. Choose a visible color variant or upload a replacement product.
@@ -22,7 +22,7 @@ Help a shopper answer “does this suit me in this exact color?” in under one 
 
 ## Release 1 — customer-ready foundation
 
-- Google OAuth authorization-code flow with PKCE, state, nonce, verified ID-token signature, and HTTP-only signed session.
+- Google Identity Services with verified ID-token signature, audience, issuer, timestamps, email verification, same-origin credential submission, and an HTTP-only signed session.
 - Google Gemini 3.1 Flash Image generation with stateless interactions (`store=false`).
 - Clothes, eyewear, headwear, jewelry, watches, bags, and shoes.
 - One licensed example product per category plus customer product uploads.
@@ -68,3 +68,9 @@ Help a shopper answer “does this suit me in this exact color?” in under one 
 - No claim of size accuracy or guaranteed physical fit.
 - No checkout, fake pricing, fake inventory, decorative swatches, or controls without working behavior.
 - No use of customer photos for training and no automatic storage of generation inputs.
+
+## Private QA checkpoint
+
+- Test Login is feature-flagged and available only while the Sites deployment remains owner-only.
+- It exercises the same protected generation, storage, deletion, and logout paths as the future Google session.
+- Disable Test Login before changing the site to public access.

@@ -12,7 +12,7 @@ Date: 2026-07-13
 
 ## Authenticated AI try-on matrix
 
-The following tests ran against the complete local edge runtime with an isolated, signed QA account and the configured Gemini image model. Each response was decoded and visually inspected for placement, identity preservation, and selected color.
+The following tests ran against the private production deployment through the explicitly enabled Test Login session and the configured Gemini image model. Each response was decoded and visually inspected for placement, identity preservation, and selected color.
 
 | Category | Product | Variant | Result |
 | --- | --- | --- | --- |
@@ -34,8 +34,15 @@ The eyewear test initially exposed a request-size failure. Its 1.9 MB PNG was re
 - Delete look and all associated images: `204`
 - Read after deletion: `404`
 
-## Remaining launch gate
+## Test Login lifecycle
 
-The production site remains owner-only until the Google Identity Services Web client is configured and the real browser login/logout flow is verified. No synthetic production session was used.
+- Test Login session creation: `200`
+- Browser CTA transition from login screen to Dashboard: passed
+- Dashboard category navigation: all seven categories visible
+- Protected session lookup: `200`
+- Logout redirect: `307`
+- Session after logout: `user=null`
 
-For private production QA, `TEST_LOGIN_ENABLED=true` may temporarily expose a clearly labeled Test Login button. This path issues the same signed HTTP-only session and exercises the same protected generation and saved-look APIs. It must remain disabled before public access is enabled.
+## Deferred launch gate
+
+Per product-owner direction, Google sign-in is temporarily deferred. The production site remains owner-only while `TEST_LOGIN_ENABLED=true`; Test Login issues the same signed HTTP-only session and exercises the same protected generation and saved-look APIs. Test Login must be disabled and Google Identity Services verified before public access is enabled.
