@@ -70,6 +70,8 @@ Version 17 was exercised after the D1 usage migration and environment revision w
 - Save hardened result: `201`; list and metadata check: `200`; private result image: `200 image/jpeg`.
 - Delete temporary QA look: `204`; image after deletion: `404`.
 - Working generation through the migrated `try_on_usage` table confirms the production usage migration is active.
+- Concurrent saved-look boundary: 13 simultaneous saves produced exactly twelve `201` responses and one `409 SAVED_LOOK_LIMIT`; the account then listed 12 unique looks.
+- QA cleanup: all twelve temporary looks returned `204` on deletion and the final account list was empty.
 
 ## Deferred launch gate
 
