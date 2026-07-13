@@ -12,6 +12,7 @@ test("ships a focused Google-gated dashboard with adaptive photos and real varia
   ]);
   assert.match(page, /Dashboard/);
   assert.match(page, /Continue with Google/);
+  assert.match(page, /Test Login/);
   assert.match(page, /Half body/);
   assert.match(page, /Full body/);
   assert.match(page, /normalizePerson/);
@@ -28,11 +29,12 @@ test("ships a focused Google-gated dashboard with adaptive photos and real varia
   }
 });
 
-test("protects generation and storage with verified Google OAuth", async () => {
-  const [tryOn, auth, credentialAuth, session, looks, deleteLook, schema] = await Promise.all([
+test("protects generation and storage with verified Google and private test sessions", async () => {
+  const [tryOn, auth, credentialAuth, testAuth, session, looks, deleteLook, schema] = await Promise.all([
     source("../app/api/try-on/route.ts"),
     source("../lib/google-auth.ts"),
     source("../app/api/auth/google/credential/route.ts"),
+    source("../app/api/auth/test/route.ts"),
     source("../app/api/auth/session/route.ts"),
     source("../app/api/looks/route.ts"),
     source("../app/api/looks/[id]/route.ts"),
@@ -43,8 +45,13 @@ test("protects generation and storage with verified Google OAuth", async () => {
   assert.match(credentialAuth, /request\.headers\.get\("origin"\)/);
   assert.match(credentialAuth, /claims\.aud !== env\.GOOGLE_CLIENT_ID/);
   assert.match(credentialAuth, /SESSION_COOKIE/);
+  assert.match(testAuth, /TEST_LOGIN_ENABLED !== "true"/);
+  assert.match(testAuth, /request\.headers\.get\("origin"\)/);
+  assert.match(testAuth, /createSessionToken/);
+  assert.match(testAuth, /maxAge: 60 \* 60 \* 8/);
   assert.match(auth, /httpOnly|SESSION_COOKIE/);
   assert.match(session, /googleConfigured/);
+  assert.match(session, /testLoginEnabled/);
   assert.match(tryOn, /getGoogleUser/);
   assert.match(tryOn, /gemini-3\.1-flash-image/);
   assert.match(tryOn, /generativelanguage\.googleapis\.com\/v1beta\/interactions/);

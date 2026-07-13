@@ -37,3 +37,5 @@ The eyewear test initially exposed a request-size failure. Its 1.9 MB PNG was re
 ## Remaining launch gate
 
 The production site remains owner-only until the Google Identity Services Web client is configured and the real browser login/logout flow is verified. No synthetic production session was used.
+
+For private production QA, `TEST_LOGIN_ENABLED=true` may temporarily expose a clearly labeled Test Login button. This path issues the same signed HTTP-only session and exercises the same protected generation and saved-look APIs. It must remain disabled before public access is enabled.

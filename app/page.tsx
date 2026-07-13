@@ -147,6 +147,7 @@ export default function Home() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [googleConfigured, setGoogleConfigured] = useState(true);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [testLoginEnabled, setTestLoginEnabled] = useState(false);
   const [googleScriptReady, setGoogleScriptReady] = useState(false);
   const [googleSigningIn, setGoogleSigningIn] = useState(false);
   const [user, setUser] = useState<AccountUser | null>(null);
@@ -186,10 +187,11 @@ export default function Home() {
   useEffect(() => {
     const auth = new URLSearchParams(window.location.search).get("auth");
     if (auth) window.history.replaceState({}, "", window.location.pathname);
-    fetch("/api/auth/session").then((response) => response.json()).then((data: { user?: AccountUser; googleConfigured?: boolean; googleClientId?: string | null }) => {
+    fetch("/api/auth/session").then((response) => response.json()).then((data: { user?: AccountUser; googleConfigured?: boolean; googleClientId?: string | null; testLoginEnabled?: boolean }) => {
       setUser(data.user ?? null);
       setGoogleConfigured(Boolean(data.googleConfigured));
       setGoogleClientId(data.googleClientId ?? null);
+      setTestLoginEnabled(Boolean(data.testLoginEnabled));
       if (data.user) void loadLooks();
       if (auth === "failed") setNotice("Google sign-in could not be completed. Please try again.");
       if (auth === "setup") setNotice("Google sign-in is being configured.");
@@ -263,6 +265,22 @@ export default function Home() {
   async function loadLooks() {
     const response = await fetch("/api/looks");
     if (response.ok) setLooks(((await response.json()) as { looks: Look[] }).looks);
+  }
+
+  async function testLogin() {
+    setGoogleSigningIn(true);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/auth/test", { method: "POST" });
+      const data = await response.json() as { user?: AccountUser; error?: string };
+      if (!response.ok || !data.user) throw new Error(data.error || "Test login could not be completed.");
+      setUser(data.user);
+      await loadLooks();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Test login could not be completed.");
+    } finally {
+      setGoogleSigningIn(false);
+    }
   }
 
   async function loadPerson(file: File) {
@@ -367,12 +385,12 @@ export default function Home() {
 
   if (!user) return (
     <main className="login-screen">
-      <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onReady={() => setGoogleScriptReady(true)} />
+      {!testLoginEnabled && <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onReady={() => setGoogleScriptReady(true)} />}
       <section className="login-panel">
         <div className="login-brand"><span className="brand-mark">T</span><strong>Try-it-on</strong></div>
         <div className="login-copy"><span className="eyebrow">Your personal fitting room</span><h1>See it on you.<br />Then decide.</h1><p>Upload one photo, choose a wearable, and preview the exact product and color on your body before you buy.</p></div>
-        <div className={`google-login-slot${googleSigningIn ? " signing-in" : ""}`} ref={googleButton} aria-label="Continue with Google">{googleSigningIn ? "Signing you in…" : googleConfigured ? "Loading secure Google sign-in…" : "Google sign-in unavailable"}</div>
-        {!googleConfigured && <p className="login-setup">Google sign-in is awaiting its production client credentials.</p>}
+        {testLoginEnabled ? <button className="test-login-button" type="button" onClick={() => void testLogin()} disabled={googleSigningIn}>{googleSigningIn ? "Opening Dashboard…" : "Test Login"}</button> : <div className={`google-login-slot${googleSigningIn ? " signing-in" : ""}`} ref={googleButton} aria-label="Continue with Google">{googleSigningIn ? "Signing you in…" : googleConfigured ? "Loading secure Google sign-in…" : "Google sign-in unavailable"}</div>}
+        {testLoginEnabled ? <p className="login-setup">Private QA access. Google sign-in is temporarily skipped.</p> : !googleConfigured && <p className="login-setup">Google sign-in is awaiting its production client credentials.</p>}
         <div className="login-trust"><span><LockKey size={17} /> Photos stay private</span><span><ShieldCheck size={17} /> Delete saved looks anytime</span></div>
         <p className="login-legal">AI previews help with style decisions, not physical size or fit guarantees.</p>
       </section>

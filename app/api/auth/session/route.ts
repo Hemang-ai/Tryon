@@ -8,5 +8,6 @@ export async function GET() {
     user: await getGoogleUser(),
     googleConfigured: Boolean(env.GOOGLE_CLIENT_ID && env.AUTH_SECRET),
     googleClientId: env.GOOGLE_CLIENT_ID || null,
+    testLoginEnabled: env.TEST_LOGIN_ENABLED === "true",
   });
 }
