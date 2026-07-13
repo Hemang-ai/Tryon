@@ -11,6 +11,11 @@ type GeminiInteraction = {
   error?: { message?: string };
 };
 
+const CAPACITY_ERROR = {
+  code: "TRY_ON_CAPACITY_UNAVAILABLE",
+  error: "Realistic try-on is temporarily at capacity. Please try again shortly.",
+};
+
 async function fileToBase64(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = "";
@@ -95,10 +100,16 @@ export async function POST(request: Request) {
     });
     const interaction = (await response.json()) as GeminiInteraction;
     if (!response.ok || interaction.status === "failed") {
+      if (response.status === 429) {
+        return NextResponse.json(CAPACITY_ERROR, {
+          status: 503,
+          headers: { "Retry-After": "60" },
+        });
+      }
       const stepError = interaction.steps?.find((step) => step.error)?.error?.message;
       return NextResponse.json(
         { error: interaction.error?.message ?? stepError ?? "Google Gemini could not create this try-on." },
-        { status: response.status === 429 ? 429 : 502 },
+        { status: 502 },
       );
     }
     const image = findGeneratedImage(interaction);

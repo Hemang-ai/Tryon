@@ -35,6 +35,8 @@ test("connects Google-native realistic generation, Google auth, and private save
   assert.match(tryOn, /gemini-3\.1-flash-image/);
   assert.match(tryOn, /generativelanguage\.googleapis\.com\/v1beta\/interactions/);
   assert.match(tryOn, /store: false/);
+  assert.match(tryOn, /TRY_ON_CAPACITY_UNAVAILABLE/);
+  assert.match(tryOn, /Retry-After/);
   assert.doesNotMatch(tryOn, /FASHN|fashn/i);
   assert.match(authStart, /code_challenge_method/);
   assert.match(authCallback, /verifyGoogleIdToken/);
