@@ -6,7 +6,7 @@ Date: 2026-07-13
 
 - Production build: passed
 - ESLint: passed
-- Source-level product/authentication tests: 3 passed
+- Source-level product/authentication tests: 4 passed
 - Production catalog delivery: passed for all seven categories
 - Production authentication boundary: unauthenticated generation returns `401`
 
@@ -42,6 +42,20 @@ The eyewear test initially exposed a request-size failure. Its 1.9 MB PNG was re
 - Protected session lookup: `200`
 - Logout redirect: `307`
 - Session after logout: `user=null`
+
+## Release hardening
+
+- All seven demo products are bundled and no longer depend on a third-party image host at runtime.
+- Client and API upload allowlist: JPG, PNG, and WebP only; 20 MB maximum.
+- Unsupported category rejection: passed with an actionable `400` response.
+- Missing photo-processing consent rejection: passed with an actionable `400` response.
+- Unsupported MIME rejection: passed with an actionable `400` response.
+- Plain-language photo permission and storage disclosure: visible immediately beside upload.
+- Per-account daily generation budget: migration and atomic limit query validated; failed provider requests are refunded.
+- Saved-look failure compensation: partial R2 objects are removed when storage or metadata creation fails.
+- Permanent-delete confirmation: present before saved images and metadata are removed.
+- Mobile Test Login and Dashboard states: captured and visually inspected; no clipped primary action or horizontal page overflow found.
+- Starter-only routes, example code, icons, duplicate imagery, and stale design QA were removed.
 
 ## Deferred launch gate
 

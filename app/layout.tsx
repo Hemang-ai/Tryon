@@ -16,10 +16,6 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://mirra-virtual-try-on.databackup123.chatgpt.site"),
   title: "Try-it-on — Your personal fitting room",
   description: "A private, category-aware virtual fitting room for clothes, eyewear, jewelry, hats, watches, bags, and shoes.",
-  icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
-  },
   openGraph: {
     title: "Try-it-on — Your personal fitting room",
     description: "Upload your photo, select a wearable, and preview your look with confidence.",

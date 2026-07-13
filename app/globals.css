@@ -98,6 +98,7 @@ button { color: inherit; }
 .photo-drop span { color: #7d7277; font-size: 11px; }
 .photo-drop > div { display: flex; justify-content: center; gap: 20px; color: #746a70; font-size: 10px; }
 .photo-drop > div span { display: flex; align-items: center; gap: 5px; }
+.photo-consent { width: min(520px, 90%); margin: -8px auto 0; color: #6f656a; font-size: 11px; line-height: 1.5; text-align: center; }
 .photo-controls { position: absolute; z-index: 6; left: 18px; right: 18px; bottom: 18px; display: grid; grid-template-columns: 186px 1fr 1fr; align-items: center; gap: 15px; padding: 13px; border: 1px solid rgba(255,255,255,.26); border-radius: 12px; background: rgba(35,24,31,.84); color: white; backdrop-filter: blur(16px); }
 .mode-toggle { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 8px; background: rgba(0,0,0,.24); }
 .mode-toggle button { min-height: 31px; border: 0; border-radius: 6px; background: transparent; color: #bfaeb7; cursor: pointer; font-size: 10px; }
@@ -202,7 +203,7 @@ button { color: inherit; }
   .workspace-heading { align-items: end; }
   .workspace-heading h1 { font-size: 29px; }
   .upload-photo-button { width: 42px; padding: 0; justify-content: center; }
-  .upload-photo-button:not(:focus) { font-size: 0; }
+  .upload-photo-button .upload-label { display: none; }
   .upload-photo-button svg { width: 18px; height: 18px; }
   .photo-stage { min-height: 520px; }
   .photo-drop { padding: 18px; }

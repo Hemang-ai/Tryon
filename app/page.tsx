@@ -9,6 +9,7 @@ import Image from "next/image";
 import Script from "next/script";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { catalog, categoryIds, type CategoryId, type ProductVariant } from "@/lib/catalog";
+import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES } from "@/lib/uploads";
 
 type PhotoMode = "half" | "full";
 type AccountUser = { id: string; email: string; name: string; picture?: string | null };
@@ -284,7 +285,7 @@ export default function Home() {
   }
 
   async function loadPerson(file: File) {
-    if (!file.type.startsWith("image/") || file.size > 20 * 1024 * 1024) { setNotice("Choose an image under 20 MB."); return; }
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number]) || file.size > MAX_IMAGE_BYTES) { setNotice("Choose a JPG, PNG, or WebP image under 20 MB."); return; }
     if (personObjectUrl.current) URL.revokeObjectURL(personObjectUrl.current);
     personObjectUrl.current = URL.createObjectURL(file);
     setPersonUrl(personObjectUrl.current);
@@ -299,7 +300,7 @@ export default function Home() {
   }
 
   async function loadProduct(file: File) {
-    if (!file.type.startsWith("image/") || file.size > 20 * 1024 * 1024) { setNotice("Choose an image under 20 MB."); return; }
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number]) || file.size > MAX_IMAGE_BYTES) { setNotice("Choose a JPG, PNG, or WebP image under 20 MB."); return; }
     if (productObjectUrl.current) URL.revokeObjectURL(productObjectUrl.current);
     productObjectUrl.current = URL.createObjectURL(file);
     setProductUrl(productObjectUrl.current);
@@ -343,10 +344,11 @@ export default function Home() {
       data.append("product", preparedProduct);
       data.append("category", categoryId);
       data.append("variantName", variant.name);
+      data.append("consent", "photo-processing-v1");
       if (variant.hex) data.append("variantHex", variant.hex);
       const response = await fetch("/api/try-on", { method: "POST", body: data });
       const payload = await response.json() as { resultUrl?: string; error?: string };
-      if (response.status === 401) { setUser(null); throw new Error("Sign in with Google to continue."); }
+      if (response.status === 401) { setUser(null); throw new Error("Your session expired. Sign in to continue."); }
       if (!response.ok || !payload.resultUrl) throw new Error(payload.error ?? "No preview was returned.");
       setResultUrl(payload.resultUrl); setGenerated(true); setCompare(52); setSaved(false);
       setNotice(`${product.name} in ${variant.name} is ready.`);
@@ -375,6 +377,7 @@ export default function Home() {
   }
 
   async function deleteLook(id: string) {
+    if (!window.confirm("Permanently delete this saved look and its photos?")) return;
     const response = await fetch(`/api/looks/${id}`, { method: "DELETE" });
     if (!response.ok) { setNotice("This saved look could not be deleted."); return; }
     setLooks((current) => current.filter((look) => look.id !== id));
@@ -421,12 +424,12 @@ export default function Home() {
         </aside>
 
         <div className="dashboard-content">
-          <section className="workspace-heading"><div><span className="eyebrow">Dashboard</span><h1>Build your next look</h1><p>Choose a product, select its color, then upload a clear photo.</p></div><button className="upload-photo-button" onClick={() => personInput.current?.click()}><UploadSimple size={18} /> {personFile ? "Replace photo" : "Upload photo"}</button></section>
+          <section className="workspace-heading"><div><span className="eyebrow">Dashboard</span><h1>Build your next look</h1><p>Choose a product, select its color, then upload a clear photo.</p></div><button className="upload-photo-button" aria-label={personFile ? "Replace photo" : "Upload photo"} onClick={() => personInput.current?.click()}><UploadSimple size={18} /><span className="upload-label">{personFile ? "Replace photo" : "Upload photo"}</span></button></section>
 
           <section className="tryon-workspace">
             <div className="photo-column">
               <div className="photo-stage">
-                {personUrl ? <Image src={personUrl} alt="Your uploaded photo" fill priority className="person-photo" style={sourceStyle} unoptimized /> : <div className={isDragging ? "photo-drop dragging" : "photo-drop"} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); const file = event.dataTransfer.files[0]; if (file) void loadPerson(file); }}><button onClick={() => personInput.current?.click()}><CloudArrowUp size={37} /><strong>Upload your photo</strong><span>Full or half body · JPG, PNG, WebP · 20 MB max</span></button><div><span><Check size={14} /> Even lighting</span><span><Check size={14} /> Placement area visible</span></div></div>}
+                {personUrl ? <Image src={personUrl} alt="Your uploaded photo" fill priority className="person-photo" style={sourceStyle} unoptimized /> : <div className={isDragging ? "photo-drop dragging" : "photo-drop"} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); const file = event.dataTransfer.files[0]; if (file) void loadPerson(file); }}><button onClick={() => personInput.current?.click()}><CloudArrowUp size={37} /><strong>Upload your photo</strong><span>Full or half body · JPG, PNG, WebP · 20 MB max</span></button><div><span><Check size={14} /> Even lighting</span><span><Check size={14} /> Placement area visible</span></div><p className="photo-consent">By uploading, you confirm you have permission to use this photo. It is processed only for your preview and is not saved unless you choose Save look.</p></div>}
                 {generated && resultUrl && <div className="result-layer" style={{ clipPath: `inset(0 0 0 ${compare}%)` }}><Image src={resultUrl} alt={`${product.name} virtual try-on`} fill className="person-photo" unoptimized /></div>}
                 {generated && <><input className="compare-range" type="range" min="0" max="100" value={compare} onChange={(event) => setCompare(Number(event.target.value))} aria-label="Compare before and after" /><div className="compare-labels"><span>Before</span><span>After</span></div></>}
                 {personFile && !generated && <div className="photo-controls"><div className="mode-toggle"><button className={photoMode === "half" ? "active" : ""} onClick={() => setPhotoMode("half")}>Half body</button><button className={photoMode === "full" ? "active" : ""} onClick={() => setPhotoMode("full")}>Full body</button></div><label>Zoom<input type="range" min="100" max="145" value={photoZoom} onChange={(event) => setPhotoZoom(Number(event.target.value))} /></label><label>Position<input type="range" min="-25" max="25" value={photoPosition} onChange={(event) => setPhotoPosition(Number(event.target.value))} /></label></div>}
@@ -453,8 +456,8 @@ export default function Home() {
         </div>
       </div>
 
-      <input ref={personInput} className="hidden-input" type="file" accept="image/*" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void loadPerson(file); event.target.value = ""; }} />
-      <input ref={productInput} className="hidden-input" type="file" accept="image/*" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void loadProduct(file); event.target.value = ""; }} />
+      <input ref={personInput} className="hidden-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void loadPerson(file); event.target.value = ""; }} />
+      <input ref={productInput} className="hidden-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void loadProduct(file); event.target.value = ""; }} />
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice(null)} aria-label="Dismiss"><X size={17} /></button></div>}
     </main>
   );

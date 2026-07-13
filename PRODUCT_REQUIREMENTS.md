@@ -30,34 +30,34 @@ Each category must provide its own photo framing guidance, product-image require
 
 1. Shopper chooses a wearable category.
 2. Try-it-on explains whether a face, half-body, wrist/hand, or full-body photo works best.
-3. Shopper uploads their photo or continues with the sample.
+3. Shopper uploads a photo they have permission to use.
 4. Shopper selects a catalog item or uploads a product photo.
-5. Try-it-on validates file type, size, visibility, lighting, pose, and likely occlusions.
+5. Try-it-on validates file type and size, detects likely half/full-body framing, and gives category-specific visibility, lighting, pose, and occlusion guidance.
 6. Shopper generates a preview and sees an honest progress state.
 7. Result opens with a before/after scrubber, confidence cues, and a “style preview—not an exact sizing guarantee” disclaimer.
 8. Shopper can save, retry, replace either image, or continue to a retailer.
 
 ## Functional requirements
 
-- Accept JPG, PNG, WebP, and HEIC inputs up to 20 MB.
+- Accept JPG, PNG, and WebP inputs up to 20 MB. Treat HEIC conversion as a post-launch enhancement so support is consistent across browsers.
 - Support drag-and-drop, file picker, touch, and keyboard input.
 - Detect photo framing and route it to the selected category workflow.
 - Preserve the person’s identity, body proportions, pose, skin tone, and background.
 - Preserve the product’s color, silhouette, texture, logos, and key details.
 - Use category-specific placement instructions and photo requirements while keeping one maintainable Google-native image engine.
-- Return a result, actionable error, or retry path within 30 seconds; target under 8 seconds for face accessories.
+- Return a result, actionable error, or retry path; target a median time to preview under 45 seconds.
 - Provide original/result comparison, retry, save, replace-photo, and replace-product actions.
 - Never imply the visualization proves physical size or comfort.
 
 ## Trust, safety, and privacy
 
-- Obtain plain-language consent immediately before upload.
+- Obtain plain-language permission and processing consent immediately before upload, and require the matching consent marker in the generation API.
 - Encrypt images in transit and at rest.
-- Default to deleting original and generated photos within 24 hours.
+- Keep unsaved originals and generated photos in memory only. Persist them only when the shopper explicitly saves a look, then retain until the shopper deletes it.
 - Do not use customer images for training without separate, explicit opt-in consent.
 - Block sexualized transformations, minors in inappropriate categories, non-consensual images, and identity-changing requests.
 - Provide immediate deletion and account-level retention controls when accounts are introduced.
-- Keep an auditable record of consent, processing provider, retention deadline, and deletion outcome without retaining the image itself.
+- Keep auditable consent, provider, retention, and deletion metadata in the merchant-pilot phase; Release 1 requires consent enforcement and user-controlled deletion.
 
 ## Architecture recommendation
 
@@ -68,7 +68,8 @@ Each category must provide its own photo framing guidance, product-image require
 - Privacy: send `store=false` on every Gemini interaction so uploaded customer images are not retained as Interaction objects.
 - Storage: short-lived encrypted object storage with lifecycle deletion; store only processing metadata and derived quality signals long-term.
 - Identity: require Google Identity Services before the dashboard or any generation/storage API is available. Verify signed ID tokens, audience, issuer, timestamps, email verification, and same-origin requests server-side, then issue a signed HTTP-only application session.
-- Queue: asynchronous jobs with idempotency, retries, timeout handling, and provider fallback.
+- Cost protection: enforce a per-account daily generation budget and refund failed provider attempts.
+- Queue: add asynchronous jobs with idempotency, retries, timeout handling, and provider fallback during the merchant-pilot phase.
 - Observability: latency, generation failure, identity drift, product fidelity, retry rate, save rate, and downstream conversion.
 
 ## API contract

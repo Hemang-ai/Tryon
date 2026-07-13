@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function source(path) {
@@ -20,6 +20,10 @@ test("ships a focused Google-gated dashboard with adaptive photos and real varia
   assert.match(page, /recolorProduct/);
   assert.match(page, /variantHex/);
   assert.match(page, /product\.fullBody/);
+  assert.match(page, /image\/jpeg,image\/png,image\/webp/);
+  assert.match(page, /Permanently delete this saved look and its photos/);
+  assert.match(page, /permission to use this photo/);
+  assert.match(page, /photo-processing-v1/);
   assert.match(layout, /Try-it-on — Your personal fitting room/);
   assert.match(css, /dashboard-layout/);
   assert.match(css, /variant-swatches/);
@@ -30,7 +34,7 @@ test("ships a focused Google-gated dashboard with adaptive photos and real varia
 });
 
 test("protects generation and storage with verified Google and private test sessions", async () => {
-  const [tryOn, auth, credentialAuth, testAuth, session, looks, deleteLook, schema] = await Promise.all([
+  const [tryOn, auth, credentialAuth, testAuth, session, looks, deleteLook, schema, uploads, migration] = await Promise.all([
     source("../app/api/try-on/route.ts"),
     source("../lib/google-auth.ts"),
     source("../app/api/auth/google/credential/route.ts"),
@@ -39,6 +43,8 @@ test("protects generation and storage with verified Google and private test sess
     source("../app/api/looks/route.ts"),
     source("../app/api/looks/[id]/route.ts"),
     source("../db/schema.ts"),
+    source("../lib/uploads.ts"),
+    source("../drizzle/0002_crazy_hiroim.sql"),
   ]);
   assert.match(credentialAuth, /verifyGoogleIdToken/);
   assert.match(credentialAuth, /claims\.email_verified/);
@@ -57,21 +63,63 @@ test("protects generation and storage with verified Google and private test sess
   assert.match(tryOn, /generativelanguage\.googleapis\.com\/v1beta\/interactions/);
   assert.match(tryOn, /store: false/);
   assert.match(tryOn, /variantInstruction/);
+  assert.match(tryOn, /DAILY_GENERATION_LIMIT/);
+  assert.match(tryOn, /try_on_usage/);
+  assert.match(tryOn, /releaseGeneration/);
+  assert.match(tryOn, /isCategoryId/);
+  assert.match(tryOn, /isAllowedImage/);
+  assert.match(tryOn, /Confirm photo-processing permission/);
   assert.doesNotMatch(tryOn, /FASHN|fashn/i);
   assert.match(looks, /getGoogleUser/);
   assert.match(looks, /variant_name/);
   assert.match(looks, /env\.BUCKET\.put/);
+  assert.match(looks, /Promise\.allSettled/);
+  assert.match(looks, /isCategoryId/);
+  assert.match(looks, /isAllowedImage/);
   assert.match(deleteLook, /env\.BUCKET\.delete/);
   assert.match(deleteLook, /DELETE FROM try_on_looks/);
   assert.match(schema, /variantName/);
   assert.match(schema, /onDelete: "cascade"/);
+  assert.match(schema, /tryOnUsage/);
+  assert.match(uploads, /image\/jpeg/);
+  assert.match(uploads, /image\/png/);
+  assert.match(uploads, /image\/webp/);
+  assert.match(migration, /CREATE TABLE `try_on_usage`/);
 });
 
-test("provides an allowlisted demo product image for every remote category", async () => {
-  const [route, catalog] = await Promise.all([source("../app/api/catalog/[category]/route.ts"), source("../lib/catalog.ts")]);
-  for (const category of ["clothes", "headwear", "jewelry", "watches", "bags", "shoes"]) {
-    assert.match(route, new RegExp(`${category}:`));
+test("bundles a working demo product image for every category", async () => {
+  const catalog = await source("../lib/catalog.ts");
+  const assets = [
+    "essential-tee.webp", "tortoiseshell-glasses.jpg", "everyday-cap.jpg", "heritage-drops.jpg",
+    "minimal-watch.jpg", "heritage-carryall.jpg", "campus-runner.jpg",
+  ];
+  for (const asset of assets) {
+    assert.match(catalog, new RegExp(`assets/${asset.replace(".", "\\.")}`));
+    await access(new URL(`../public/assets/${asset}`, import.meta.url));
   }
-  assert.match(route, /Cache-Control/);
-  assert.match(catalog, /assets\/tortoiseshell-glasses\.jpg/);
+  await assert.rejects(access(new URL("../app/api/catalog/[category]/route.ts", import.meta.url)));
+});
+
+test("contains no starter-only application surfaces or unused public icons", async () => {
+  const removed = [
+    "../app/chatgpt-auth.ts",
+    "../examples/d1/app/api/notes/route.ts",
+    "../public/file.svg",
+    "../public/globe.svg",
+    "../public/window.svg",
+    "../public/og.png",
+    "../public/assets/mirra-original.png",
+    "../public/favicon.svg",
+    "../design-qa.md",
+  ];
+  for (const path of removed) {
+    await assert.rejects(access(new URL(path, import.meta.url)));
+  }
+  const [manifest, readme, worker] = await Promise.all([
+    source("../package.json"), source("../README.md"), source("../worker/index.ts"),
+  ]);
+  assert.match(manifest, /"name": "try-it-on"/);
+  assert.match(readme, /^# Try-it-on/m);
+  assert.doesNotMatch(readme, /vinext-starter/);
+  assert.doesNotMatch(worker, /vinext-starter template/);
 });

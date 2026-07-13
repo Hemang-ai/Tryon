@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
 import { getGoogleUser } from "@/lib/google-auth";
+import { isCategoryId } from "@/lib/catalog";
+import { isAllowedImage } from "@/lib/uploads";
 
 export const runtime = "edge";
 
@@ -16,6 +18,35 @@ const CAPACITY_ERROR = {
   code: "TRY_ON_CAPACITY_UNAVAILABLE",
   error: "Realistic try-on is temporarily at capacity. Please try again shortly.",
 };
+
+const DEFAULT_DAILY_GENERATION_LIMIT = 20;
+
+function dailyGenerationLimit() {
+  const configured = Number.parseInt(env.DAILY_GENERATION_LIMIT || "", 10);
+  return Number.isFinite(configured) && configured > 0 ? Math.min(configured, 500) : DEFAULT_DAILY_GENERATION_LIMIT;
+}
+
+function secondsUntilTomorrowUtc(now: Date) {
+  const tomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return Math.max(1, Math.ceil((tomorrow - now.getTime()) / 1000));
+}
+
+async function reserveGeneration(userId: string) {
+  if (!env.DB) return { allowed: true, day: null };
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  const result = await env.DB.prepare(`INSERT INTO try_on_usage (user_id, usage_day, generation_count, updated_at) VALUES (?, ?, 1, ?) ON CONFLICT(user_id, usage_day) DO UPDATE SET generation_count = generation_count + 1, updated_at = excluded.updated_at WHERE generation_count < ? RETURNING generation_count`).bind(userId, day, now.toISOString(), dailyGenerationLimit()).first<{ generation_count: number }>();
+  return { allowed: Boolean(result), day };
+}
+
+async function releaseGeneration(userId: string, day: string | null) {
+  if (!env.DB || !day) return;
+  try {
+    await env.DB.prepare(`UPDATE try_on_usage SET generation_count = MAX(0, generation_count - 1), updated_at = ? WHERE user_id = ? AND usage_day = ?`).bind(new Date().toISOString(), userId, day).run();
+  } catch {
+    // Best-effort refund: never mask the provider error with accounting failure.
+  }
+}
 
 async function fileToBase64(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -61,7 +92,8 @@ function findGeneratedImage(interaction: GeminiInteraction) {
 }
 
 export async function POST(request: Request) {
-  if (!(await getGoogleUser())) return NextResponse.json({ error: "Sign in with Google to create a try-on." }, { status: 401 });
+  const user = await getGoogleUser();
+  if (!user) return NextResponse.json({ error: "Sign in to create a try-on." }, { status: 401 });
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -77,11 +109,25 @@ export async function POST(request: Request) {
   const variantName = String(data.get("variantName") ?? "Original").replace(/[^\w -]/g, "").slice(0, 32) || "Original";
   const requestedHex = String(data.get("variantHex") ?? "");
   const variantHex = /^#[0-9a-fA-F]{6}$/.test(requestedHex) ? requestedHex : null;
+  if (data.get("consent") !== "photo-processing-v1") {
+    return NextResponse.json({ error: "Confirm photo-processing permission before creating a preview." }, { status: 400 });
+  }
+  if (!isCategoryId(category)) {
+    return NextResponse.json({ error: "Choose a supported wearable category." }, { status: 400 });
+  }
   if (!(person instanceof File) || !(product instanceof File)) {
     return NextResponse.json({ error: "Both person and product images are required." }, { status: 400 });
   }
-  if ([person, product].some((file) => !file.type.startsWith("image/") || file.size > 20 * 1024 * 1024)) {
-    return NextResponse.json({ error: "Images must be valid and under 20 MB each." }, { status: 400 });
+  if ([person, product].some((file) => !isAllowedImage(file))) {
+    return NextResponse.json({ error: "Use a JPG, PNG, or WebP image under 20 MB." }, { status: 400 });
+  }
+  const reservation = await reserveGeneration(user.id);
+  if (!reservation.allowed) {
+    const retryAfter = secondsUntilTomorrowUtc(new Date());
+    return NextResponse.json(
+      { code: "DAILY_GENERATION_LIMIT", error: `You have reached today's ${dailyGenerationLimit()}-preview limit. Try again tomorrow.` },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
   }
 
   try {
@@ -108,6 +154,7 @@ export async function POST(request: Request) {
     });
     const interaction = (await response.json()) as GeminiInteraction;
     if (!response.ok || interaction.status === "failed") {
+      await releaseGeneration(user.id, reservation.day);
       if (response.status === 429) {
         return NextResponse.json(CAPACITY_ERROR, {
           status: 503,
@@ -122,6 +169,7 @@ export async function POST(request: Request) {
     }
     const image = findGeneratedImage(interaction);
     if (!image?.data) {
+      await releaseGeneration(user.id, reservation.day);
       return NextResponse.json({ error: "Google Gemini returned no try-on image." }, { status: 502 });
     }
     return NextResponse.json({
@@ -130,6 +178,7 @@ export async function POST(request: Request) {
       resultUrl: `data:${image.mime_type ?? "image/jpeg"};base64,${image.data}`,
     });
   } catch {
+    await releaseGeneration(user.id, reservation.day);
     return NextResponse.json({ error: "Google Gemini image generation could not be reached." }, { status: 502 });
   }
 }
