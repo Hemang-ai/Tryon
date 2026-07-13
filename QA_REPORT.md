@@ -57,6 +57,19 @@ The eyewear test initially exposed a request-size failure. Its 1.9 MB PNG was re
 - Mobile Test Login and Dashboard states: captured and visually inspected; no clipped primary action or horizontal page overflow found.
 - Starter-only routes, example code, icons, duplicate imagery, and stale design QA were removed.
 
+## Hardened production checkpoint
+
+Version 17 was exercised after the D1 usage migration and environment revision were applied:
+
+- Seven bundled catalog assets: `200 image/jpeg` for every category.
+- Unsupported category: `400` with actionable copy.
+- Missing processing consent: `400` with actionable copy.
+- Unsupported MIME type: `400` with actionable copy.
+- Consent-bearing Burgundy clothes generation: `200`; the returned Gemini JPEG was decoded and visually inspected for identity, placement, and selected color.
+- Save hardened result: `201`; list and metadata check: `200`; private result image: `200 image/jpeg`.
+- Delete temporary QA look: `204`; image after deletion: `404`.
+- Working generation through the migrated `try_on_usage` table confirms the production usage migration is active.
+
 ## Deferred launch gate
 
 Per product-owner direction, Google sign-in is temporarily deferred. The production site remains owner-only while `TEST_LOGIN_ENABLED=true`; Test Login issues the same signed HTTP-only session and exercises the same protected generation and saved-look APIs. Test Login must be disabled and Google Identity Services verified before public access is enabled.
