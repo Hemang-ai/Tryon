@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
 import { getGoogleUser } from "@/lib/google-auth";
 import { isCategoryId } from "@/lib/catalog";
+import { MAX_SAVED_LOOKS } from "@/lib/looks";
 import { isAllowedImage } from "@/lib/uploads";
 
 export const runtime = "edge";
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!env.DB) return NextResponse.json({ looks: [] });
 
-  const result = await env.DB.prepare(`SELECT id, category, variant_name AS variantName, variant_hex AS variantHex, created_at AS createdAt FROM try_on_looks WHERE user_id = ? ORDER BY created_at DESC LIMIT 12`).bind(user.id).all();
+  const result = await env.DB.prepare(`SELECT id, category, variant_name AS variantName, variant_hex AS variantHex, created_at AS createdAt FROM try_on_looks WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`).bind(user.id, MAX_SAVED_LOOKS).all();
   const looks = (result.results ?? []).map((look) => ({ ...look, imageUrl: `/api/looks/${look.id}/image` }));
   return NextResponse.json({ looks });
 }
@@ -21,6 +22,14 @@ export async function POST(request: Request) {
   const user = await getGoogleUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!env.DB || !env.BUCKET) return NextResponse.json({ error: "Account storage is not configured." }, { status: 503 });
+
+  const existing = await env.DB.prepare(`SELECT COUNT(*) AS count FROM try_on_looks WHERE user_id = ?`).bind(user.id).first<{ count: number }>();
+  if (Number(existing?.count ?? 0) >= MAX_SAVED_LOOKS) {
+    return NextResponse.json(
+      { code: "SAVED_LOOK_LIMIT", error: `You can save up to ${MAX_SAVED_LOOKS} looks. Delete one before saving another.` },
+      { status: 409 },
+    );
+  }
 
   const data = await request.formData();
   const person = data.get("person");
@@ -55,8 +64,14 @@ export async function POST(request: Request) {
       env.BUCKET.put(resultKey, await result.arrayBuffer(), { httpMetadata: { contentType: result.type } }),
     ]);
     await env.DB.prepare(`INSERT INTO try_on_looks (id, user_id, category, variant_name, variant_hex, person_key, product_key, result_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, user.id, category, variantName, variantHex, personKey, productKey, resultKey, timestamp).run();
-  } catch {
+  } catch (error) {
     await Promise.allSettled(keys.map((key) => env.BUCKET.delete(key)));
+    if (String(error).includes("SAVED_LOOK_LIMIT")) {
+      return NextResponse.json(
+        { code: "SAVED_LOOK_LIMIT", error: `You can save up to ${MAX_SAVED_LOOKS} looks. Delete one before saving another.` },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: "This look could not be saved. Please try again." }, { status: 502 });
   }
 

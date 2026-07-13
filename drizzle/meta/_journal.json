@@ -22,6 +22,13 @@
       "when": 1783976248525,
       "tag": "0002_crazy_hiroim",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1783977686894,
+      "tag": "0003_limit_saved_looks",
+      "breakpoints": true
     }
   ]
 }

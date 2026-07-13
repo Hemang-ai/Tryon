@@ -34,7 +34,7 @@ test("ships a focused Google-gated dashboard with adaptive photos and real varia
 });
 
 test("protects generation and storage with verified Google and private test sessions", async () => {
-  const [tryOn, auth, credentialAuth, testAuth, session, looks, deleteLook, schema, uploads, migration] = await Promise.all([
+  const [tryOn, auth, credentialAuth, testAuth, session, looks, deleteLook, schema, uploads, migration, limitMigration, lookConfig] = await Promise.all([
     source("../app/api/try-on/route.ts"),
     source("../lib/google-auth.ts"),
     source("../app/api/auth/google/credential/route.ts"),
@@ -45,6 +45,8 @@ test("protects generation and storage with verified Google and private test sess
     source("../db/schema.ts"),
     source("../lib/uploads.ts"),
     source("../drizzle/0002_crazy_hiroim.sql"),
+    source("../drizzle/0003_limit_saved_looks.sql"),
+    source("../lib/looks.ts"),
   ]);
   assert.match(credentialAuth, /verifyGoogleIdToken/);
   assert.match(credentialAuth, /claims\.email_verified/);
@@ -74,6 +76,8 @@ test("protects generation and storage with verified Google and private test sess
   assert.match(looks, /variant_name/);
   assert.match(looks, /env\.BUCKET\.put/);
   assert.match(looks, /Promise\.allSettled/);
+  assert.match(looks, /SAVED_LOOK_LIMIT/);
+  assert.match(looks, /COUNT\(\*\) AS count/);
   assert.match(looks, /isCategoryId/);
   assert.match(looks, /isAllowedImage/);
   assert.match(deleteLook, /env\.BUCKET\.delete/);
@@ -85,6 +89,9 @@ test("protects generation and storage with verified Google and private test sess
   assert.match(uploads, /image\/png/);
   assert.match(uploads, /image\/webp/);
   assert.match(migration, /CREATE TABLE `try_on_usage`/);
+  assert.match(limitMigration, /CREATE TRIGGER `try_on_looks_limit_before_insert`/);
+  assert.match(limitMigration, /RAISE\(ABORT, 'SAVED_LOOK_LIMIT'\)/);
+  assert.match(lookConfig, /MAX_SAVED_LOOKS = 12/);
 });
 
 test("bundles a working demo product image for every category", async () => {

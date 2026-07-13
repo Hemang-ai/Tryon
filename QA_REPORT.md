@@ -54,6 +54,7 @@ The eyewear test initially exposed a request-size failure. Its 1.9 MB PNG was re
 - Per-account daily generation budget: migration and atomic limit query validated; failed provider requests are refunded.
 - Saved-look failure compensation: partial R2 objects are removed when storage or metadata creation fails.
 - Permanent-delete confirmation: present before saved images and metadata are removed.
+- Saved-look retention boundary: exactly 12 inserts succeed; the 13th is atomically rejected with `SAVED_LOOK_LIMIT` before image storage.
 - Mobile Test Login and Dashboard states: captured and visually inspected; no clipped primary action or horizontal page overflow found.
 - Starter-only routes, example code, icons, duplicate imagery, and stale design QA were removed.
 

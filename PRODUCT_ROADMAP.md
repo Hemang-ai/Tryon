@@ -29,6 +29,7 @@ Help a shopper answer “does this suit me in this exact color?” in under one 
 - Functional variant recoloring in the product preview and explicit color instructions in the generation request.
 - Adaptive half/full-body framing, zoom, and vertical positioning.
 - Private saved looks backed by D1 and R2, including user-controlled permanent deletion.
+- A server-enforced 12-look account limit so every retained photo remains visible and deletable.
 - Clear “style preview, not fit guarantee” language.
 
 ## Release 1.1 — merchant pilot

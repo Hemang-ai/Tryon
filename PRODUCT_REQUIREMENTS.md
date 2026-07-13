@@ -47,6 +47,7 @@ Each category must provide its own photo framing guidance, product-image require
 - Use category-specific placement instructions and photo requirements while keeping one maintainable Google-native image engine.
 - Return a result, actionable error, or retry path; target a median time to preview under 45 seconds.
 - Provide original/result comparison, retry, save, replace-photo, and replace-product actions.
+- Limit each account to 12 visible saved looks and reject additional saves before any image bytes are stored.
 - Never imply the visualization proves physical size or comfort.
 
 ## Trust, safety, and privacy

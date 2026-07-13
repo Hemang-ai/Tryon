@@ -9,6 +9,7 @@ import Image from "next/image";
 import Script from "next/script";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { catalog, categoryIds, type CategoryId, type ProductVariant } from "@/lib/catalog";
+import { MAX_SAVED_LOOKS } from "@/lib/looks";
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES } from "@/lib/uploads";
 
 type PhotoMode = "half" | "full";
@@ -360,6 +361,7 @@ export default function Home() {
 
   async function saveLook() {
     if (!generated || !resultUrl || !personFile || !productFile) { setNotice("Create a new try-on before saving it."); return; }
+    if (looks.length >= MAX_SAVED_LOOKS) { setNotice(`You can save up to ${MAX_SAVED_LOOKS} looks. Delete one before saving another.`); return; }
     try {
       const [preparedPerson, preparedProduct, result] = await Promise.all([
         normalizePerson(personFile, photoMode, photoZoom, photoPosition),
@@ -444,13 +446,13 @@ export default function Home() {
               <div className="variant-section"><div><strong>Color</strong><span>{variant.name}</span></div><div className="variant-swatches">{product.variants.map((item, index) => <button key={item.name} className={selectedVariant === index ? "variant active" : "variant"} style={{ "--swatch": item.hex ?? "linear-gradient(135deg,#9a5935 0 30%,#261c22 32% 60%,#d78a42 62%)" } as React.CSSProperties} onClick={() => chooseVariant(index)} aria-pressed={selectedVariant === index} aria-label={`Choose ${item.name}`}><i /></button>)}</div></div>
               <div className="photo-requirement"><strong>Photo requirement</strong><span>{product.guidance}</span></div>
               <button className="generate-button" onClick={() => void generateTryOn()} disabled={processing || productLoading}>{processing ? <><span className="spinner" /> Creating your look…</> : generated ? <><ArrowCounterClockwise size={19} /> Create again</> : <><MagicWand size={19} weight="fill" /> Try this on</>}</button>
-              <button className={saved ? "save-look saved" : "save-look"} onClick={() => void saveLook()} disabled={!generated}><Heart size={18} weight={saved ? "fill" : "regular"} /> {saved ? "Saved to dashboard" : "Save look"}</button>
+              <button className={saved ? "save-look saved" : "save-look"} onClick={() => void saveLook()} disabled={!generated || looks.length >= MAX_SAVED_LOOKS}><Heart size={18} weight={saved ? "fill" : "regular"} /> {saved ? "Saved to dashboard" : looks.length >= MAX_SAVED_LOOKS ? "Delete a saved look to save" : "Save look"}</button>
               {product.creditUrl !== "#" && <a className="asset-credit" href={product.creditUrl} target="_blank" rel="noreferrer">Demo image: {product.credit} · {product.license}</a>}
             </aside>
           </section>
 
           <section className="saved-section">
-            <div className="saved-heading"><div><span className="eyebrow">Your account</span><h2>Saved looks</h2></div><span>{looks.length} of 12 recent looks</span></div>
+            <div className="saved-heading"><div><span className="eyebrow">Your account</span><h2>Saved looks</h2></div><span>{looks.length} of {MAX_SAVED_LOOKS} saved looks</span></div>
             {looks.length ? <div className="saved-grid">{looks.map((look) => <article className="saved-card" key={look.id}><button className="saved-open" onClick={() => { setResultUrl(look.imageUrl); setGenerated(true); setCompare(0); }}><Image src={look.imageUrl} alt={`Saved ${look.category} try-on`} width={260} height={340} unoptimized /><span>{look.category}</span><strong>{look.variantName || "Original"}</strong></button><button className="saved-delete" onClick={() => void deleteLook(look.id)} aria-label={`Delete saved ${look.category} look`}><Trash size={16} /></button></article>)}</div> : <div className="saved-empty"><Heart size={25} /><strong>No saved looks yet</strong><span>Create a try-on and save it here for comparison.</span></div>}
           </section>
         </div>
