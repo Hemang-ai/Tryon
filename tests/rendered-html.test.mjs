@@ -33,27 +33,24 @@ test("ships a focused Google-gated dashboard with adaptive photos and real varia
   }
 });
 
-test("protects generation and storage with verified Google and private test sessions", async () => {
-  const [tryOn, auth, credentialAuth, testAuth, session, looks, deleteLook, schema, uploads, migration, limitMigration, lookConfig] = await Promise.all([
+test("protects generation with verified Google and private browser storage", async () => {
+  const [tryOn, auth, credentialAuth, testAuth, session, page, browserLooks, uploads, lookConfig] = await Promise.all([
     source("../app/api/try-on/route.ts"),
     source("../lib/google-auth.ts"),
     source("../app/api/auth/google/credential/route.ts"),
     source("../app/api/auth/test/route.ts"),
     source("../app/api/auth/session/route.ts"),
-    source("../app/api/looks/route.ts"),
-    source("../app/api/looks/[id]/route.ts"),
-    source("../db/schema.ts"),
+    source("../app/page.tsx"),
+    source("../lib/client-looks.ts"),
     source("../lib/uploads.ts"),
-    source("../drizzle/0002_crazy_hiroim.sql"),
-    source("../drizzle/0003_limit_saved_looks.sql"),
     source("../lib/looks.ts"),
   ]);
   assert.match(credentialAuth, /verifyGoogleIdToken/);
   assert.match(credentialAuth, /claims\.email_verified/);
   assert.match(credentialAuth, /request\.headers\.get\("origin"\)/);
-  assert.match(credentialAuth, /claims\.aud !== env\.GOOGLE_CLIENT_ID/);
+  assert.match(credentialAuth, /claims\.aud !== runtimeEnv\.GOOGLE_CLIENT_ID/);
   assert.match(credentialAuth, /SESSION_COOKIE/);
-  assert.match(testAuth, /TEST_LOGIN_ENABLED !== "true"/);
+  assert.match(testAuth, /runtimeEnv\.TEST_LOGIN_ENABLED !== "true"/);
   assert.match(testAuth, /request\.headers\.get\("origin"\)/);
   assert.match(testAuth, /createSessionToken/);
   assert.match(testAuth, /maxAge: 60 \* 60 \* 8/);
@@ -65,42 +62,28 @@ test("protects generation and storage with verified Google and private test sess
   assert.match(tryOn, /store: false/);
   assert.match(tryOn, /variantInstruction/);
   assert.match(tryOn, /DAILY_GENERATION_LIMIT/);
-  assert.match(tryOn, /try_on_usage/);
-  assert.match(tryOn, /releaseGeneration/);
+  assert.match(tryOn, /USAGE_COOKIE/);
   assert.match(tryOn, /isCategoryId/);
   assert.match(tryOn, /isAllowedImage/);
   assert.match(tryOn, /Confirm photo-processing permission/);
   assert.doesNotMatch(tryOn, /FASHN|fashn/i);
-  assert.match(looks, /getGoogleUser/);
-  assert.match(looks, /variant_name/);
-  assert.match(looks, /env\.BUCKET\.put/);
-  assert.match(looks, /Promise\.allSettled/);
-  assert.match(looks, /SAVED_LOOK_LIMIT/);
-  assert.match(looks, /COUNT\(\*\) AS count/);
-  assert.match(looks, /isCategoryId/);
-  assert.match(looks, /isAllowedImage/);
-  assert.match(deleteLook, /env\.BUCKET\.delete/);
-  assert.match(deleteLook, /DELETE FROM try_on_looks/);
-  assert.match(schema, /variantName/);
-  assert.match(schema, /onDelete: "cascade"/);
-  assert.match(schema, /tryOnUsage/);
+  assert.match(page, /saveBrowserLook/);
+  assert.match(page, /deleteBrowserLook/);
+  assert.match(page, /Saved privately in this browser/);
+  assert.match(browserLooks, /indexedDB\.open/);
+  assert.match(browserLooks, /createIndex\("userId"/);
   assert.match(uploads, /image\/jpeg/);
   assert.match(uploads, /image\/png/);
   assert.match(uploads, /image\/webp/);
-  assert.match(migration, /CREATE TABLE `try_on_usage`/);
-  assert.match(limitMigration, /CREATE TRIGGER `try_on_looks_limit_before_insert`/);
-  assert.match(limitMigration, /RAISE\(ABORT, 'SAVED_LOOK_LIMIT'\)/);
   assert.match(lookConfig, /MAX_SAVED_LOOKS = 12/);
 });
 
 test("supports encrypted per-account Gemini and OpenAI provider settings", async () => {
-  const [page, tryOn, providers, settings, schema, migration, envExample] = await Promise.all([
+  const [page, tryOn, providers, settings, envExample] = await Promise.all([
     source("../app/page.tsx"),
     source("../app/api/try-on/route.ts"),
     source("../lib/ai-providers.ts"),
     source("../app/api/settings/ai-providers/route.ts"),
-    source("../db/schema.ts"),
-    source("../drizzle/0004_daily_penance.sql"),
     source("../.env.example"),
   ]);
   assert.match(page, /AI provider/);
@@ -114,11 +97,9 @@ test("supports encrypted per-account Gemini and OpenAI provider settings", async
   assert.match(providers, /CREDENTIAL_ENCRYPTION_KEY/);
   assert.doesNotMatch(settings, /encryptedKey.*NextResponse|keyIv.*NextResponse/);
   assert.match(settings, /request\.headers\.get\("origin"\)/);
-  assert.match(settings, /DELETE FROM ai_provider_credentials/);
-  assert.match(schema, /aiProviderCredentials/);
-  assert.match(schema, /aiProviderSettings/);
-  assert.match(migration, /CREATE TABLE `ai_provider_credentials`/);
-  assert.match(migration, /CREATE TABLE `ai_provider_settings`/);
+  assert.match(settings, /httpOnly: true/);
+  assert.match(settings, /delete settings\.credentials/);
+  assert.match(settings, /AI_SETTINGS_COOKIE/);
   assert.match(envExample, /OPENAI_IMAGE_MODEL=gpt-image-2/);
 });
 
@@ -150,11 +131,11 @@ test("contains no starter-only application surfaces or unused public icons", asy
   for (const path of removed) {
     await assert.rejects(access(new URL(path, import.meta.url)));
   }
-  const [manifest, readme, worker] = await Promise.all([
-    source("../package.json"), source("../README.md"), source("../worker/index.ts"),
+  const [manifest, readme] = await Promise.all([
+    source("../package.json"), source("../README.md"),
   ]);
   assert.match(manifest, /"name": "try-it-on"/);
   assert.match(readme, /^# Try-it-on/m);
   assert.doesNotMatch(readme, /vinext-starter/);
-  assert.doesNotMatch(worker, /vinext-starter template/);
+  assert.doesNotMatch(manifest, /vinext|wrangler|cloudflare/i);
 });

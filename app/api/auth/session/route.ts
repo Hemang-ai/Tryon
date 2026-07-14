@@ -1,13 +1,12 @@
-import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
 import { getGoogleUser } from "@/lib/google-auth";
+import { runtimeEnv } from "@/lib/runtime-env";
 
-export const runtime = "edge";
 export async function GET() {
   return NextResponse.json({
     user: await getGoogleUser(),
-    googleConfigured: Boolean(env.GOOGLE_CLIENT_ID && env.AUTH_SECRET),
-    googleClientId: env.GOOGLE_CLIENT_ID || null,
-    testLoginEnabled: env.TEST_LOGIN_ENABLED === "true",
+    googleConfigured: Boolean(runtimeEnv.GOOGLE_CLIENT_ID && runtimeEnv.AUTH_SECRET),
+    googleClientId: runtimeEnv.GOOGLE_CLIENT_ID || null,
+    testLoginEnabled: runtimeEnv.TEST_LOGIN_ENABLED === "true",
   });
 }

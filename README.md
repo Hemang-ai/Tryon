@@ -2,46 +2,47 @@
 
 Try-it-on is an account-based virtual fitting room for apparel and accessories. A shopper uploads a half- or full-body photo, chooses a product and color, and generates a realistic preview with Google Gemini or OpenAI Image.
 
-Live private preview: [mirra-virtual-try-on.databackup123.chatgpt.site](https://mirra-virtual-try-on.databackup123.chatgpt.site)
+Production: [tryon-hemangs-projects-e0d7efbf.vercel.app](https://tryon-hemangs-projects-e0d7efbf.vercel.app)
 
 > AI output is a style visualization. It is not a physical size, fit, safety, or purchase guarantee.
 
 ## What works
 
-- Google Identity Services sign-in plus an owner-only Test Login mode
+- Google Identity Services sign-in plus an optional Test Login mode
 - Clothes, eyewear, headwear, jewelry, watches, bags, and shoes
-- Bundled example product for every category and customer product uploads
+- Bundled product examples and customer product uploads
 - Half/full-body framing, zoom, and vertical positioning
-- Product color variants with material-preserving generation instructions
+- Product color variants with product-preserving generation instructions
 - Gemini and OpenAI Image provider support
-- Optional encrypted API key per account (bring your own key)
+- Optional encrypted personal API keys
 - Before/after comparison
-- Private saved looks with permanent deletion
-- Daily generation limit and 12-look account cap
+- Up to 12 private saved looks per signed-in user and browser
 - JPG, PNG, and WebP validation with explicit photo-processing consent
 
-## How provider selection works
+## Provider selection
 
-Signed-in shoppers open **AI provider settings** from the gear icon in the header.
+Signed-in shoppers open **AI provider settings** from the gear icon.
 
-- **Auto** uses the first available provider in this order: personal Gemini key, app Gemini key, personal OpenAI key, app OpenAI key.
-- **Gemini** uses that account's Gemini key, then the app Gemini key.
-- **OpenAI** uses that account's OpenAI key, then the app OpenAI key.
+- **Auto** chooses the first available provider in this order: personal Gemini, app Gemini, personal OpenAI, app OpenAI.
+- **Gemini** uses the shopper's Gemini key, then the app Gemini key.
+- **OpenAI** uses the shopper's OpenAI key, then the app OpenAI key.
 
-Personal keys are AES-GCM encrypted on the server before being saved in D1. The API never returns the plaintext or encrypted value to the browser. Replacing and deleting a key are supported. Requests made with a personal key are billed to that provider account.
+Personal keys are encrypted with AES-GCM before being placed in a secure, HTTP-only account cookie. The API never returns a key to browser JavaScript. Replacing and deleting a key are supported. Requests made with a personal key are billed by that provider to the shopper's provider account.
 
 ## Technology
 
-- Next.js-compatible Vinext application on Cloudflare Workers
-- D1 for users, usage, saved-look metadata, provider preferences, and encrypted credentials
-- R2 for explicitly saved source and generated images
+- Next.js App Router on Vercel Functions
 - Google Identity Services for sign-in
 - Gemini Interactions API for Gemini image generation
-- OpenAI Image Edits API with `gpt-image-2` for person-plus-product generation
+- OpenAI Image Edits API for person-plus-product generation
+- IndexedDB for private saved-look storage in the current browser
+- Encrypted HTTP-only cookies for sessions and personal provider settings
+
+The production MVP does not require a database or object-storage service. Saved looks do not sync between browsers or devices.
 
 ## Local setup
 
-Requires Node.js 22.13 or newer.
+Requires Node.js 22.13 through Node.js 24.
 
 ```bash
 npm install
@@ -49,60 +50,65 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Create long, random values for `AUTH_SECRET` and `CREDENTIAL_ENCRYPTION_KEY`. Keep them stable after launch: changing the credential encryption key makes previously stored personal provider keys unreadable.
+Create long random values for `AUTH_SECRET` and `CREDENTIAL_ENCRYPTION_KEY`. Keep both stable after launch; changing them signs users out and makes previously encrypted personal provider keys unreadable.
 
 ### Environment variables
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `AUTH_SECRET` | Yes | Signs the secure account session cookie |
-| `CREDENTIAL_ENCRYPTION_KEY` | Recommended | Encrypts personal AI provider keys; falls back to `AUTH_SECRET` if omitted |
-| `GOOGLE_CLIENT_ID` | For Google login | Google OAuth Web client ID; the client secret is not used by the current GIS ID-token flow |
+| `AUTH_SECRET` | Yes | Signs secure account session cookies |
+| `CREDENTIAL_ENCRYPTION_KEY` | Recommended | Encrypts personal provider keys; falls back to `AUTH_SECRET` |
+| `GOOGLE_CLIENT_ID` | For Google login | Google OAuth Web client ID; no client secret is used by this flow |
 | `GEMINI_API_KEY` | Optional | App-managed Gemini fallback key |
 | `GEMINI_IMAGE_MODEL` | Optional | Defaults to `gemini-3.1-flash-image` |
 | `OPENAI_API_KEY` | Optional | App-managed OpenAI fallback key |
 | `OPENAI_IMAGE_MODEL` | Optional | Defaults to `gpt-image-2` |
-| `DAILY_GENERATION_LIMIT` | Optional | Per-account UTC daily cap; defaults to 20 |
-| `TEST_LOGIN_ENABLED` | No | Owner QA bypass; use only on a private environment and disable before public launch |
+| `DAILY_GENERATION_LIMIT` | Optional | Browser-enforced daily cap for the app-managed key; defaults to 20 |
+| `TEST_LOGIN_ENABLED` | No | QA bypass; set to `false` for a public launch |
 
-At least one app-managed provider key is recommended for a consumer launch. With neither app key configured, each shopper must add a personal key before generating.
+With no app-managed provider key, each shopper must add a personal key before generating.
 
 ## Google login configuration
 
-In Google Cloud Console, open **APIs & Services → Credentials → your OAuth 2.0 Client ID**. The application uses a **Web application** client.
+Create a Google OAuth client with application type **Web application**.
 
 ### Authorized JavaScript origins
 
-Add these exact origins for the current environments:
-
 ```text
 http://localhost:3000
-https://mirra-virtual-try-on.databackup123.chatgpt.site
+https://tryon-hemangs-projects-e0d7efbf.vercel.app
 ```
 
-If local development starts on a different port, add that exact origin as well, for example `http://localhost:3001`. When a custom production domain is connected, add its exact HTTPS origin. Origins contain only scheme, host, and optional port—no path and no trailing route.
+Also add every final custom or production domain that serves the app. Enter only the scheme and hostname, with no path or trailing route.
 
 ### Authorized redirect URIs
 
-Leave this section empty for the current implementation. Google Identity Services returns an ID credential to a browser callback, and the application posts it to `/api/auth/google/credential`; Google does not redirect to that API route.
+Leave this section empty. Google Identity Services returns an ID credential to a browser callback, which the application posts to `/api/auth/google/credential`; Google does not redirect to that route.
 
-Do not enter the GitHub repository URL, the API credential route, or the Sites URL with a path as a redirect URI. If the sign-in implementation is later changed to an authorization-code redirect flow, add and implement an exact callback such as:
+An `Error 400: origin_mismatch` means the exact current browser origin is missing from **Authorized JavaScript origins**.
 
-```text
-https://YOUR_DOMAIN/api/auth/google/callback
-```
+## Vercel deployment
 
-Google configuration changes can take several minutes to propagate. An `Error 400: origin_mismatch` means the exact origin currently shown in the browser is missing from **Authorized JavaScript origins**.
+The GitHub repository is connected to the Vercel project `hemangs-projects-e0d7efbf/tryon`. Pushes to `main` create production deployments.
 
-## Database migrations
+1. Add the variables above in **Project Settings → Environment Variables** and scope them to Production.
+2. Set `TEST_LOGIN_ENABLED=true` while validating the first deployment, or `false` after the Vercel origin is accepted by Google.
+3. Run `npm test` and `npm run lint`.
+4. Push the tested commit to `main`.
+5. Inspect the Vercel build and runtime logs, then verify login, provider settings, uploads, generation, comparison, saving, deletion, and logout.
 
-Schema lives in `db/schema.ts`; generated SQL is committed under `drizzle/`.
+Vercel project URLs use the `vercel.app` domain. `tryon.vercel.com` is not a project domain. Connect a domain you own in Vercel Project Settings if a branded hostname is required.
 
-```bash
-npm run db:generate
-```
+## Data and privacy
 
-The host applies the migrations to the bound D1 database. The provider migration creates `ai_provider_settings` and `ai_provider_credentials`.
+- Uploaded images are sent to the selected AI provider only after consent.
+- Gemini requests set `store=false`.
+- Uploaded source photos are not stored by this application.
+- A saved result is stored only in IndexedDB in the current browser.
+- Personal provider keys are encrypted and kept in HTTP-only cookies.
+- API keys and `.env` files are excluded from Git.
+
+Before a public commercial launch, publish a privacy policy, terms, AI disclosure, retention policy, provider subprocessors, support contact, and an account/data deletion process.
 
 ## Validation
 
@@ -110,33 +116,6 @@ The host applies the migrations to the bound D1 database. The provider migration
 npm test
 npm run lint
 ```
-
-`npm test` builds the Cloudflare-compatible application and runs product/security contract tests. Release evidence is recorded in `QA_REPORT.md`; planned sequencing is in `PRODUCT_ROADMAP.md`.
-
-## Data and privacy
-
-- Uploaded images are sent to the selected AI provider only after consent.
-- Gemini requests set `store=false`.
-- Uploads are not persisted unless the shopper chooses **Save look**.
-- Saved looks are private to the signed-in account.
-- Deleting a saved look removes its D1 metadata and all associated R2 objects.
-- Personal provider keys are encrypted at rest and never returned to the client.
-- API keys and `.env` files are excluded from Git.
-
-Before a public commercial launch, publish a privacy policy, terms, AI disclosure, retention policy, provider subprocessors, support contact, and an account/data deletion process.
-
-## Deployment
-
-GitHub stores the source code; GitHub Pages cannot run this application because it requires server routes, secure secrets, D1, and R2. The current runtime is OpenAI Sites/Cloudflare Workers, configured by `.openai/hosting.json` with logical `DB` and `BUCKET` bindings.
-
-For production:
-
-1. Configure D1 and R2 bindings.
-2. Apply all committed migrations.
-3. Add runtime secrets through the hosting platform, never through Git.
-4. Add the final domain to Google Authorized JavaScript origins.
-5. Set `TEST_LOGIN_ENABLED=false`.
-6. Run the validation commands and deploy the exact tested commit.
 
 ## Product documentation
 

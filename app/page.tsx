@@ -7,10 +7,11 @@ import {
 } from "@phosphor-icons/react";
 import Image from "next/image";
 import Script from "next/script";
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { catalog, categoryIds, type CategoryId, type ProductVariant } from "@/lib/catalog";
 import { MAX_SAVED_LOOKS } from "@/lib/looks";
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES } from "@/lib/uploads";
+import { deleteBrowserLook, listBrowserLooks, saveBrowserLook } from "@/lib/client-looks";
 
 type PhotoMode = "half" | "full";
 type AccountUser = { id: string; email: string; name: string; picture?: string | null };
@@ -143,13 +144,6 @@ async function recolorProduct(file: File, hex: string) {
   return new File([blob], `try-it-on-${hex.slice(1)}.png`, { type: "image/png" });
 }
 
-async function urlToFile(url: string, filename: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("The image could not be prepared.");
-  const blob = await response.blob();
-  return new File([blob], filename, { type: blob.type || "image/jpeg" });
-}
-
 export default function Home() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [googleConfigured, setGoogleConfigured] = useState(true);
@@ -196,6 +190,30 @@ export default function Home() {
     objectPosition: `center ${50 + photoPosition}%`, transform: `scale(${photoZoom / 100})`,
   } : undefined;
 
+  const loadLooks = useCallback(async (userId: string) => {
+    try {
+      const stored = await listBrowserLooks(userId);
+      setLooks(stored.map((look) => ({
+        id: look.id,
+        category: look.category,
+        variantName: look.variantName,
+        variantHex: look.variantHex,
+        createdAt: look.createdAt,
+        imageUrl: look.imageUrl,
+      })));
+    } catch {
+      setNotice("Saved looks are unavailable in this browser.");
+    }
+  }, []);
+
+  const loadProviderStatus = useCallback(async () => {
+    const response = await fetch("/api/settings/ai-providers");
+    if (!response.ok) return;
+    const status = await response.json() as ProviderStatus;
+    setProviderStatus(status);
+    setProviderChoice(status.activeProvider);
+  }, []);
+
   useEffect(() => {
     const auth = new URLSearchParams(window.location.search).get("auth");
     if (auth) window.history.replaceState({}, "", window.location.pathname);
@@ -204,11 +222,11 @@ export default function Home() {
       setGoogleConfigured(Boolean(data.googleConfigured));
       setGoogleClientId(data.googleClientId ?? null);
       setTestLoginEnabled(Boolean(data.testLoginEnabled));
-      if (data.user) { void loadLooks(); void loadProviderStatus(); }
+      if (data.user) { void loadLooks(data.user.id); void loadProviderStatus(); }
       if (auth === "failed") setNotice("Google sign-in could not be completed. Please try again.");
       if (auth === "setup") setNotice("Google sign-in is being configured.");
     }).catch(() => setNotice("Your session could not be checked.")).finally(() => setSessionLoading(false));
-  }, []);
+  }, [loadLooks, loadProviderStatus]);
 
   useEffect(() => {
     const button = googleButton.current;
@@ -230,7 +248,7 @@ export default function Home() {
           const data = await response.json() as { user?: AccountUser; error?: string };
           if (!response.ok || !data.user) throw new Error(data.error || "Google sign-in could not be completed.");
           setUser(data.user);
-          await loadLooks();
+          await loadLooks(data.user.id);
           await loadProviderStatus();
         } catch (error) {
           setNotice(error instanceof Error ? error.message : "Google sign-in could not be completed.");
@@ -241,7 +259,7 @@ export default function Home() {
     });
     const width = Math.floor(Math.max(200, Math.min(430, button.getBoundingClientRect().width || 430)));
     identity.renderButton(button, { theme: "outline", size: "large", shape: "rectangular", text: "continue_with", width });
-  }, [googleClientId, googleConfigured, googleScriptReady, sessionLoading, user]);
+  }, [googleClientId, googleConfigured, googleScriptReady, loadLooks, loadProviderStatus, sessionLoading, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -274,19 +292,6 @@ export default function Home() {
     if (personObjectUrl.current) URL.revokeObjectURL(personObjectUrl.current);
     if (productObjectUrl.current) URL.revokeObjectURL(productObjectUrl.current);
   }, []);
-
-  async function loadLooks() {
-    const response = await fetch("/api/looks");
-    if (response.ok) setLooks(((await response.json()) as { looks: Look[] }).looks);
-  }
-
-  async function loadProviderStatus() {
-    const response = await fetch("/api/settings/ai-providers");
-    if (!response.ok) return;
-    const status = await response.json() as ProviderStatus;
-    setProviderStatus(status);
-    setProviderChoice(status.activeProvider);
-  }
 
   async function saveProviderSettings() {
     setProviderSaving(true);
@@ -327,7 +332,7 @@ export default function Home() {
       const data = await response.json() as { user?: AccountUser; error?: string };
       if (!response.ok || !data.user) throw new Error(data.error || "Test login could not be completed.");
       setUser(data.user);
-      await loadLooks();
+      await loadLooks(data.user.id);
       await loadProviderStatus();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Test login could not be completed.");
@@ -411,30 +416,33 @@ export default function Home() {
   }
 
   async function saveLook() {
+    if (!user) { setNotice("Sign in again before saving this look."); return; }
     if (!generated || !resultUrl || !personFile || !productFile) { setNotice("Create a new try-on before saving it."); return; }
     if (looks.length >= MAX_SAVED_LOOKS) { setNotice(`You can save up to ${MAX_SAVED_LOOKS} looks. Delete one before saving another.`); return; }
     try {
-      const [preparedPerson, preparedProduct, result] = await Promise.all([
-        normalizePerson(personFile, photoMode, photoZoom, photoPosition),
-        variant.hex ? recolorProduct(productFile, variant.hex) : normalizeProduct(productFile),
-        urlToFile(resultUrl, "try-it-on-result.jpg"),
-      ]);
-      const data = new FormData();
-      data.append("person", preparedPerson); data.append("product", preparedProduct); data.append("result", result);
-      data.append("category", categoryId); data.append("variantName", variant.name);
-      if (variant.hex) data.append("variantHex", variant.hex);
-      const response = await fetch("/api/looks", { method: "POST", body: data });
-      if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "This look could not be saved.");
-      setSaved(true); setNotice("Saved to your dashboard."); await loadLooks();
+      await saveBrowserLook({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        category: categoryId,
+        variantName: variant.name,
+        variantHex: variant.hex,
+        createdAt: new Date().toISOString(),
+        imageUrl: resultUrl,
+      });
+      setSaved(true); setNotice("Saved privately in this browser."); await loadLooks(user.id);
     } catch (error) { setNotice(error instanceof Error ? error.message : "This look could not be saved."); }
   }
 
   async function deleteLook(id: string) {
+    if (!user) { setNotice("Sign in again before deleting this look."); return; }
     if (!window.confirm("Permanently delete this saved look and its photos?")) return;
-    const response = await fetch(`/api/looks/${id}`, { method: "DELETE" });
-    if (!response.ok) { setNotice("This saved look could not be deleted."); return; }
-    setLooks((current) => current.filter((look) => look.id !== id));
-    setNotice("Saved look and its photos were deleted.");
+    try {
+      await deleteBrowserLook(user.id, id);
+      setLooks((current) => current.filter((look) => look.id !== id));
+      setNotice("Saved look and its image were deleted from this browser.");
+    } catch {
+      setNotice("This saved look could not be deleted.");
+    }
   }
 
   if (sessionLoading) return <main className="session-screen"><div className="session-card loading-card"><span className="brand-mark">T</span><p>Opening your fitting room…</p></div></main>;
@@ -482,7 +490,7 @@ export default function Home() {
           <section className="tryon-workspace">
             <div className="photo-column">
               <div className="photo-stage">
-                {personUrl ? <Image src={personUrl} alt="Your uploaded photo" fill priority className="person-photo" style={sourceStyle} unoptimized /> : <div className={isDragging ? "photo-drop dragging" : "photo-drop"} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); const file = event.dataTransfer.files[0]; if (file) void loadPerson(file); }}><button onClick={() => personInput.current?.click()}><CloudArrowUp size={37} /><strong>Upload your photo</strong><span>Full or half body · JPG, PNG, WebP · 20 MB max</span></button><div><span><Check size={14} /> Even lighting</span><span><Check size={14} /> Placement area visible</span></div><p className="photo-consent">By uploading, you confirm you have permission to use this photo. It is processed only for your preview and is not saved unless you choose Save look.</p></div>}
+                {personUrl ? <Image src={personUrl} alt="Your uploaded photo" fill priority className="person-photo" style={sourceStyle} unoptimized /> : <div className={isDragging ? "photo-drop dragging" : "photo-drop"} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); const file = event.dataTransfer.files[0]; if (file) void loadPerson(file); }}><button onClick={() => personInput.current?.click()}><CloudArrowUp size={37} /><strong>Upload your photo</strong><span>Full or half body · JPG, PNG, WebP · 20 MB max</span></button><div><span><Check size={14} /> Even lighting</span><span><Check size={14} /> Placement area visible</span></div><p className="photo-consent">By uploading, you confirm you have permission to use this photo. It is processed only for your preview and is saved only in this browser when you choose Save look.</p></div>}
                 {generated && resultUrl && <div className="result-layer" style={{ clipPath: `inset(0 0 0 ${compare}%)` }}><Image src={resultUrl} alt={`${product.name} virtual try-on`} fill className="person-photo" unoptimized /></div>}
                 {generated && <><input className="compare-range" type="range" min="0" max="100" value={compare} onChange={(event) => setCompare(Number(event.target.value))} aria-label="Compare before and after" /><div className="compare-labels"><span>Before</span><span>After</span></div></>}
                 {personFile && !generated && <div className="photo-controls"><div className="mode-toggle"><button className={photoMode === "half" ? "active" : ""} onClick={() => setPhotoMode("half")}>Half body</button><button className={photoMode === "full" ? "active" : ""} onClick={() => setPhotoMode("full")}>Full body</button></div><label>Zoom<input type="range" min="100" max="145" value={photoZoom} onChange={(event) => setPhotoZoom(Number(event.target.value))} /></label><label>Position<input type="range" min="-25" max="25" value={photoPosition} onChange={(event) => setPhotoPosition(Number(event.target.value))} /></label></div>}
@@ -503,7 +511,7 @@ export default function Home() {
           </section>
 
           <section className="saved-section">
-            <div className="saved-heading"><div><span className="eyebrow">Your account</span><h2>Saved looks</h2></div><span>{looks.length} of {MAX_SAVED_LOOKS} saved looks</span></div>
+            <div className="saved-heading"><div><span className="eyebrow">This browser</span><h2>Saved looks</h2></div><span>{looks.length} of {MAX_SAVED_LOOKS} saved looks</span></div>
             {looks.length ? <div className="saved-grid">{looks.map((look) => <article className="saved-card" key={look.id}><button className="saved-open" onClick={() => { setResultUrl(look.imageUrl); setGenerated(true); setCompare(0); }}><Image src={look.imageUrl} alt={`Saved ${look.category} try-on`} width={260} height={340} unoptimized /><span>{look.category}</span><strong>{look.variantName || "Original"}</strong></button><button className="saved-delete" onClick={() => void deleteLook(look.id)} aria-label={`Delete saved ${look.category} look`}><Trash size={16} /></button></article>)}</div> : <div className="saved-empty"><Heart size={25} /><strong>No saved looks yet</strong><span>Create a try-on and save it here for comparison.</span></div>}
           </section>
         </div>

@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import { cookies } from "next/headers";
+import { runtimeEnv } from "@/lib/runtime-env";
 
 export const SESSION_COOKIE = "tryiton_session";
 
@@ -56,15 +56,15 @@ export async function userIdForEmail(email: string) {
 }
 
 export async function createSessionToken(user: GoogleUser) {
-  if (!env.AUTH_SECRET) throw new Error("AUTH_SECRET is not configured");
+  if (!runtimeEnv.AUTH_SECRET) throw new Error("AUTH_SECRET is not configured");
   const payload = encodeJson({ ...user, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 });
-  return `${payload}.${await sign(payload, env.AUTH_SECRET)}`;
+  return `${payload}.${await sign(payload, runtimeEnv.AUTH_SECRET)}`;
 }
 
 export async function readSessionToken(token: string | undefined): Promise<GoogleUser | null> {
-  if (!token || !env.AUTH_SECRET) return null;
+  if (!token || !runtimeEnv.AUTH_SECRET) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature || !constantTimeEqual(signature, await sign(payload, env.AUTH_SECRET))) return null;
+  if (!payload || !signature || !constantTimeEqual(signature, await sign(payload, runtimeEnv.AUTH_SECRET))) return null;
   const session = decodeJson<SessionPayload>(payload);
   if (!session || session.exp <= Math.floor(Date.now() / 1000)) return null;
   return { id: session.id, email: session.email, name: session.name, picture: session.picture };
@@ -80,9 +80,9 @@ export async function verifyGoogleIdToken(token: string) {
     const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
     const header = decodeJson<{ alg?: string; kid?: string }>(encodedHeader);
     if (!header?.kid || header.alg !== "RS256" || !encodedPayload || !encodedSignature) return null;
-    const response = await fetch("https://www.googleapis.com/oauth2/v3/certs", { cf: { cacheTtl: 3600, cacheEverything: true } });
+    const response = await fetch("https://www.googleapis.com/oauth2/v3/certs", { next: { revalidate: 3600 } });
     if (!response.ok) return null;
-    const keys = await response.json() as { keys?: JsonWebKey[] };
+    const keys = await response.json() as { keys?: Array<JsonWebKey & { kid?: string }> };
     const jwk = keys.keys?.find((key) => key.kid === header.kid && key.kty === "RSA");
     if (!jwk) return null;
     const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);

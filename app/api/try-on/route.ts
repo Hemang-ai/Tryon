@@ -1,11 +1,12 @@
-import { env } from "cloudflare:workers";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getGoogleUser } from "@/lib/google-auth";
 import { isCategoryId } from "@/lib/catalog";
 import { isAllowedImage } from "@/lib/uploads";
 import { resolveAiProvider } from "@/lib/ai-providers";
+import { runtimeEnv } from "@/lib/runtime-env";
 
-export const runtime = "edge";
+export const maxDuration = 300;
 
 type GeminiImage = { type?: string; data?: string; mime_type?: string; uri?: string };
 type GeminiStep = { type?: string; content?: GeminiImage[]; error?: { message?: string } };
@@ -22,32 +23,18 @@ const CAPACITY_ERROR = {
 };
 
 const DEFAULT_DAILY_GENERATION_LIMIT = 20;
+const USAGE_COOKIE = "tryiton_daily_usage";
 
 function dailyGenerationLimit() {
-  const configured = Number.parseInt(env.DAILY_GENERATION_LIMIT || "", 10);
+  const configured = Number.parseInt(runtimeEnv.DAILY_GENERATION_LIMIT || "", 10);
   return Number.isFinite(configured) && configured > 0 ? Math.min(configured, 500) : DEFAULT_DAILY_GENERATION_LIMIT;
 }
 
-function secondsUntilTomorrowUtc(now: Date) {
-  const tomorrow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-  return Math.max(1, Math.ceil((tomorrow - now.getTime()) / 1000));
-}
-
-async function reserveGeneration(userId: string) {
-  if (!env.DB) return { allowed: true, day: null };
-  const now = new Date();
-  const day = now.toISOString().slice(0, 10);
-  const result = await env.DB.prepare(`INSERT INTO try_on_usage (user_id, usage_day, generation_count, updated_at) VALUES (?, ?, 1, ?) ON CONFLICT(user_id, usage_day) DO UPDATE SET generation_count = generation_count + 1, updated_at = excluded.updated_at WHERE generation_count < ? RETURNING generation_count`).bind(userId, day, now.toISOString(), dailyGenerationLimit()).first<{ generation_count: number }>();
-  return { allowed: Boolean(result), day };
-}
-
-async function releaseGeneration(userId: string, day: string | null) {
-  if (!env.DB || !day) return;
-  try {
-    await env.DB.prepare(`UPDATE try_on_usage SET generation_count = MAX(0, generation_count - 1), updated_at = ? WHERE user_id = ? AND usage_day = ?`).bind(new Date().toISOString(), userId, day).run();
-  } catch {
-    // Best-effort refund: never mask the provider error with accounting failure.
-  }
+async function platformUsageToday() {
+  const day = new Date().toISOString().slice(0, 10);
+  const store = await cookies();
+  const [storedDay, storedCount] = (store.get(USAGE_COOKIE)?.value ?? "").split(":");
+  return { day, count: storedDay === day ? Number.parseInt(storedCount || "0", 10) || 0 : 0 };
 }
 
 async function fileToBase64(file: File) {
@@ -171,12 +158,11 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
-  const reservation = await reserveGeneration(user.id);
-  if (!reservation.allowed) {
-    const retryAfter = secondsUntilTomorrowUtc(new Date());
+  const usage = await platformUsageToday();
+  if (selectedProvider.source === "platform" && usage.count >= dailyGenerationLimit()) {
     return NextResponse.json(
       { code: "DAILY_GENERATION_LIMIT", error: `You have reached today's ${dailyGenerationLimit()}-preview limit. Try again tomorrow.` },
-      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+      { status: 429 },
     );
   }
 
@@ -186,7 +172,6 @@ export async function POST(request: Request) {
       ? await generateWithGemini(selectedProvider.apiKey, selectedProvider.model, person, product, prompt)
       : await generateWithOpenAi(selectedProvider.apiKey, selectedProvider.model, person, product, prompt);
     if (!generation.ok) {
-      await releaseGeneration(user.id, reservation.day);
       if (generation.status === 429) {
         return NextResponse.json(CAPACITY_ERROR, {
           status: 503,
@@ -204,14 +189,23 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
-    return NextResponse.json({
+    const response = NextResponse.json({
       mode: "provider",
       provider: selectedProvider.provider,
       credentialSource: selectedProvider.source,
       resultUrl: generation.resultUrl,
     });
+    if (selectedProvider.source === "platform") {
+      response.cookies.set(USAGE_COOKIE, `${usage.day}:${usage.count + 1}`, {
+        httpOnly: true,
+        secure: new URL(request.url).protocol === "https:",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 26,
+      });
+    }
+    return response;
   } catch {
-    await releaseGeneration(user.id, reservation.day);
     return NextResponse.json({ error: `${selectedProvider.provider === "gemini" ? "Gemini" : "OpenAI"} image generation could not be reached.` }, { status: 502 });
   }
 }
