@@ -2,7 +2,7 @@
 
 Try-it-on is an account-based virtual fitting room for apparel and accessories. A shopper uploads a half- or full-body photo, chooses a product and color, and generates a realistic preview with Google Gemini or OpenAI Image.
 
-Production: [tryon-hemangs-projects-e0d7efbf.vercel.app](https://tryon-hemangs-projects-e0d7efbf.vercel.app)
+Production: [tryon-opal.vercel.app](https://tryon-opal.vercel.app)
 
 > AI output is a style visualization. It is not a physical size, fit, safety, or purchase guarantee.
 
@@ -76,7 +76,7 @@ Create a Google OAuth client with application type **Web application**.
 
 ```text
 http://localhost:3000
-https://tryon-hemangs-projects-e0d7efbf.vercel.app
+https://tryon-opal.vercel.app
 ```
 
 Also add every final custom or production domain that serves the app. Enter only the scheme and hostname, with no path or trailing route.
