@@ -38,3 +38,22 @@ export const tryOnUsage = sqliteTable(
     index("try_on_usage_day_idx").on(table.usageDay),
   ],
 );
+
+export const aiProviderSettings = sqliteTable("ai_provider_settings", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  activeProvider: text("active_provider").notNull().default("auto"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const aiProviderCredentials = sqliteTable(
+  "ai_provider_credentials",
+  {
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    encryptedKey: text("encrypted_key").notNull(),
+    keyIv: text("key_iv").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.provider] })],
+);

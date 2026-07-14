@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getGoogleUser } from "@/lib/google-auth";
 import { isCategoryId } from "@/lib/catalog";
 import { isAllowedImage } from "@/lib/uploads";
+import { resolveAiProvider } from "@/lib/ai-providers";
 
 export const runtime = "edge";
 
@@ -13,6 +14,7 @@ type GeminiInteraction = {
   steps?: GeminiStep[];
   error?: { message?: string };
 };
+type OpenAiImagesResponse = { data?: Array<{ b64_json?: string }>; error?: { message?: string; code?: string } };
 
 const CAPACITY_ERROR = {
   code: "TRY_ON_CAPACITY_UNAVAILABLE",
@@ -91,16 +93,57 @@ function findGeneratedImage(interaction: GeminiInteraction) {
   return null;
 }
 
+async function generateWithGemini(apiKey: string, model: string, person: File, product: File, prompt: string) {
+  const [personData, productData] = await Promise.all([fileToBase64(person), fileToBase64(product)]);
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+    method: "POST",
+    headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      input: [
+        { type: "text", text: prompt },
+        { type: "image", mime_type: person.type, data: personData },
+        { type: "image", mime_type: product.type, data: productData },
+      ],
+      response_format: { type: "image", mime_type: "image/jpeg", aspect_ratio: "3:4", image_size: "1K" },
+      generation_config: { thinking_level: "high" },
+      store: false,
+    }),
+  });
+  const interaction = (await response.json()) as GeminiInteraction;
+  if (!response.ok || interaction.status === "failed") {
+    const message = interaction.error?.message ?? interaction.steps?.find((step) => step.error)?.error?.message;
+    return { ok: false as const, status: response.status, message };
+  }
+  const image = findGeneratedImage(interaction);
+  if (!image?.data) return { ok: false as const, status: 502, message: "Gemini returned no try-on image." };
+  return { ok: true as const, resultUrl: `data:${image.mime_type ?? "image/jpeg"};base64,${image.data}` };
+}
+
+async function generateWithOpenAi(apiKey: string, model: string, person: File, product: File, prompt: string) {
+  const form = new FormData();
+  form.append("model", model);
+  form.append("image[]", person, "person.jpg");
+  form.append("image[]", product, "product.jpg");
+  form.append("prompt", prompt);
+  form.append("size", "1024x1536");
+  form.append("quality", "medium");
+  form.append("output_format", "jpeg");
+  const response = await fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  const result = (await response.json()) as OpenAiImagesResponse;
+  if (!response.ok) return { ok: false as const, status: response.status, message: result.error?.message };
+  const image = result.data?.[0]?.b64_json;
+  if (!image) return { ok: false as const, status: 502, message: "OpenAI returned no try-on image." };
+  return { ok: true as const, resultUrl: `data:image/jpeg;base64,${image}` };
+}
+
 export async function POST(request: Request) {
   const user = await getGoogleUser();
   if (!user) return NextResponse.json({ error: "Sign in to create a try-on." }, { status: 401 });
-  const apiKey = env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "Google Gemini image generation is not configured yet." },
-      { status: 503 },
-    );
-  }
 
   const data = await request.formData();
   const person = data.get("person");
@@ -121,6 +164,13 @@ export async function POST(request: Request) {
   if ([person, product].some((file) => !isAllowedImage(file))) {
     return NextResponse.json({ error: "Use a JPG, PNG, or WebP image under 20 MB." }, { status: 400 });
   }
+  const selectedProvider = await resolveAiProvider(user.id).catch(() => null);
+  if (!selectedProvider) {
+    return NextResponse.json(
+      { code: "AI_PROVIDER_NOT_CONFIGURED", error: "Choose an AI provider and add an API key in AI settings." },
+      { status: 503 },
+    );
+  }
   const reservation = await reserveGeneration(user.id);
   if (!reservation.allowed) {
     const retryAfter = secondsUntilTomorrowUtc(new Date());
@@ -131,54 +181,37 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [personData, productData] = await Promise.all([fileToBase64(person), fileToBase64(product)]);
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-      method: "POST",
-      headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image",
-        input: [
-          { type: "text", text: promptFor(category, variantName, variantHex) },
-          { type: "image", mime_type: person.type, data: personData },
-          { type: "image", mime_type: product.type, data: productData },
-        ],
-        response_format: {
-          type: "image",
-          mime_type: "image/jpeg",
-          aspect_ratio: "3:4",
-          image_size: "1K",
-        },
-        generation_config: { thinking_level: "high" },
-        store: false,
-      }),
-    });
-    const interaction = (await response.json()) as GeminiInteraction;
-    if (!response.ok || interaction.status === "failed") {
+    const prompt = promptFor(category, variantName, variantHex);
+    const generation = selectedProvider.provider === "gemini"
+      ? await generateWithGemini(selectedProvider.apiKey, selectedProvider.model, person, product, prompt)
+      : await generateWithOpenAi(selectedProvider.apiKey, selectedProvider.model, person, product, prompt);
+    if (!generation.ok) {
       await releaseGeneration(user.id, reservation.day);
-      if (response.status === 429) {
+      if (generation.status === 429) {
         return NextResponse.json(CAPACITY_ERROR, {
           status: 503,
           headers: { "Retry-After": "60" },
         });
       }
-      const stepError = interaction.steps?.find((step) => step.error)?.error?.message;
+      if (generation.status === 401 || generation.status === 403) {
+        return NextResponse.json(
+          { code: "AI_PROVIDER_KEY_REJECTED", error: "The selected AI provider rejected its API key. Update it in AI settings." },
+          { status: 502 },
+        );
+      }
       return NextResponse.json(
-        { error: interaction.error?.message ?? stepError ?? "Google Gemini could not create this try-on." },
+        { error: generation.message ?? `${selectedProvider.provider === "gemini" ? "Gemini" : "OpenAI"} could not create this try-on.` },
         { status: 502 },
       );
     }
-    const image = findGeneratedImage(interaction);
-    if (!image?.data) {
-      await releaseGeneration(user.id, reservation.day);
-      return NextResponse.json({ error: "Google Gemini returned no try-on image." }, { status: 502 });
-    }
     return NextResponse.json({
       mode: "provider",
-      provider: "gemini",
-      resultUrl: `data:${image.mime_type ?? "image/jpeg"};base64,${image.data}`,
+      provider: selectedProvider.provider,
+      credentialSource: selectedProvider.source,
+      resultUrl: generation.resultUrl,
     });
   } catch {
     await releaseGeneration(user.id, reservation.day);
-    return NextResponse.json({ error: "Google Gemini image generation could not be reached." }, { status: 502 });
+    return NextResponse.json({ error: `${selectedProvider.provider === "gemini" ? "Gemini" : "OpenAI"} image generation could not be reached.` }, { status: 502 });
   }
 }

@@ -61,7 +61,6 @@ test("protects generation and storage with verified Google and private test sess
   assert.match(session, /googleConfigured/);
   assert.match(session, /testLoginEnabled/);
   assert.match(tryOn, /getGoogleUser/);
-  assert.match(tryOn, /gemini-3\.1-flash-image/);
   assert.match(tryOn, /generativelanguage\.googleapis\.com\/v1beta\/interactions/);
   assert.match(tryOn, /store: false/);
   assert.match(tryOn, /variantInstruction/);
@@ -92,6 +91,35 @@ test("protects generation and storage with verified Google and private test sess
   assert.match(limitMigration, /CREATE TRIGGER `try_on_looks_limit_before_insert`/);
   assert.match(limitMigration, /RAISE\(ABORT, 'SAVED_LOOK_LIMIT'\)/);
   assert.match(lookConfig, /MAX_SAVED_LOOKS = 12/);
+});
+
+test("supports encrypted per-account Gemini and OpenAI provider settings", async () => {
+  const [page, tryOn, providers, settings, schema, migration, envExample] = await Promise.all([
+    source("../app/page.tsx"),
+    source("../app/api/try-on/route.ts"),
+    source("../lib/ai-providers.ts"),
+    source("../app/api/settings/ai-providers/route.ts"),
+    source("../db/schema.ts"),
+    source("../drizzle/0004_daily_penance.sql"),
+    source("../.env.example"),
+  ]);
+  assert.match(page, /AI provider/);
+  assert.match(page, /Personal keys are encrypted/);
+  assert.match(tryOn, /api\.openai\.com\/v1\/images\/edits/);
+  assert.match(tryOn, /image\[\]/);
+  assert.match(tryOn, /resolveAiProvider/);
+  assert.match(providers, /AES-GCM/);
+  assert.match(providers, /gemini-3\.1-flash-image/);
+  assert.match(providers, /crypto\.subtle\.decrypt/);
+  assert.match(providers, /CREDENTIAL_ENCRYPTION_KEY/);
+  assert.doesNotMatch(settings, /encryptedKey.*NextResponse|keyIv.*NextResponse/);
+  assert.match(settings, /request\.headers\.get\("origin"\)/);
+  assert.match(settings, /DELETE FROM ai_provider_credentials/);
+  assert.match(schema, /aiProviderCredentials/);
+  assert.match(schema, /aiProviderSettings/);
+  assert.match(migration, /CREATE TABLE `ai_provider_credentials`/);
+  assert.match(migration, /CREATE TABLE `ai_provider_settings`/);
+  assert.match(envExample, /OPENAI_IMAGE_MODEL=gpt-image-2/);
 });
 
 test("bundles a working demo product image for every category", async () => {

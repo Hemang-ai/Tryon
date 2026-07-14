@@ -1,12 +1,12 @@
 # Release QA report
 
-Date: 2026-07-13
+Date: 2026-07-14
 
 ## Automated checks
 
 - Production build: passed
 - ESLint: passed
-- Source-level product/authentication tests: 4 passed
+- Source-level product/authentication/provider tests: 5 passed
 - Production catalog delivery: passed for all seven categories
 - Production authentication boundary: unauthenticated generation returns `401`
 
@@ -57,6 +57,17 @@ The eyewear test initially exposed a request-size failure. Its 1.9 MB PNG was re
 - Saved-look retention boundary: exactly 12 inserts succeed; the 13th is atomically rejected with `SAVED_LOOK_LIMIT` before image storage.
 - Mobile Test Login and Dashboard states: captured and visually inspected; no clipped primary action or horizontal page overflow found.
 - Starter-only routes, example code, icons, duplicate imagery, and stale design QA were removed.
+
+## Account AI provider configuration
+
+- Dashboard settings dialog: passed with no browser console or framework errors.
+- Auto, Gemini, and OpenAI selection UI: passed.
+- OpenAI integration contract: current multi-image `/v1/images/edits` request with `gpt-image-2`.
+- Account key create: `200`; stored value was AES-GCM ciphertext and did not contain the submitted test key.
+- Settings read: returned configuration state and model names without returning any key material.
+- Account key delete: `200`; credential row removed and active provider reset to Auto when no app key was available.
+- Production credential-encryption secret: configured separately from the session signing secret.
+- Live OpenAI generation remains provider-account dependent and was not charged during this verification; the existing production Gemini path remains the fully exercised generation path.
 
 ## Hardened production checkpoint
 

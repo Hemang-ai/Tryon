@@ -29,6 +29,13 @@
       "when": 1783977686894,
       "tag": "0003_limit_saved_looks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784051238654,
+      "tag": "0004_daily_penance",
+      "breakpoints": true
     }
   ]
 }

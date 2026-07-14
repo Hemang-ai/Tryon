@@ -2,7 +2,7 @@
 
 import {
   ArrowCounterClockwise, Check, CloudArrowUp, CoatHanger, Eyeglasses, Handbag,
-  Heart, LockKey, MagicWand, ShieldCheck, SignOut, Sneaker, Sparkle, TShirt, Trash,
+  GearSix, Heart, Key, LockKey, MagicWand, ShieldCheck, SignOut, Sneaker, Sparkle, TShirt, Trash,
   UploadSimple, User, Watch, X,
 } from "@phosphor-icons/react";
 import Image from "next/image";
@@ -16,6 +16,11 @@ type PhotoMode = "half" | "full";
 type AccountUser = { id: string; email: string; name: string; picture?: string | null };
 type Look = { id: string; category: string; variantName: string; variantHex?: string | null; createdAt: string; imageUrl: string };
 type GoogleCredentialResponse = { credential: string };
+type ProviderChoice = "auto" | "gemini" | "openai";
+type ProviderStatus = {
+  activeProvider: ProviderChoice;
+  providers: Record<"gemini" | "openai", { accountConfigured: boolean; platformConfigured: boolean; model: string }>;
+};
 
 declare global {
   interface Window {
@@ -172,6 +177,11 @@ export default function Home() {
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [looks, setLooks] = useState<Look[]>([]);
+  const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
+  const [providerChoice, setProviderChoice] = useState<ProviderChoice>("auto");
+  const [providerKey, setProviderKey] = useState("");
+  const [providerSaving, setProviderSaving] = useState(false);
   const personInput = useRef<HTMLInputElement>(null);
   const productInput = useRef<HTMLInputElement>(null);
   const googleButton = useRef<HTMLDivElement>(null);
@@ -194,7 +204,7 @@ export default function Home() {
       setGoogleConfigured(Boolean(data.googleConfigured));
       setGoogleClientId(data.googleClientId ?? null);
       setTestLoginEnabled(Boolean(data.testLoginEnabled));
-      if (data.user) void loadLooks();
+      if (data.user) { void loadLooks(); void loadProviderStatus(); }
       if (auth === "failed") setNotice("Google sign-in could not be completed. Please try again.");
       if (auth === "setup") setNotice("Google sign-in is being configured.");
     }).catch(() => setNotice("Your session could not be checked.")).finally(() => setSessionLoading(false));
@@ -221,6 +231,7 @@ export default function Home() {
           if (!response.ok || !data.user) throw new Error(data.error || "Google sign-in could not be completed.");
           setUser(data.user);
           await loadLooks();
+          await loadProviderStatus();
         } catch (error) {
           setNotice(error instanceof Error ? error.message : "Google sign-in could not be completed.");
         } finally {
@@ -269,6 +280,45 @@ export default function Home() {
     if (response.ok) setLooks(((await response.json()) as { looks: Look[] }).looks);
   }
 
+  async function loadProviderStatus() {
+    const response = await fetch("/api/settings/ai-providers");
+    if (!response.ok) return;
+    const status = await response.json() as ProviderStatus;
+    setProviderStatus(status);
+    setProviderChoice(status.activeProvider);
+  }
+
+  async function saveProviderSettings() {
+    setProviderSaving(true);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/settings/ai-providers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: providerChoice, apiKey: providerChoice === "auto" ? undefined : providerKey }),
+      });
+      const data = await response.json() as ProviderStatus & { error?: string };
+      if (!response.ok) throw new Error(data.error || "AI settings could not be saved.");
+      setProviderStatus(data); setProviderChoice(data.activeProvider); setProviderKey(""); setProviderSettingsOpen(false);
+      setNotice(`AI provider set to ${data.activeProvider === "auto" ? "Auto" : data.activeProvider === "gemini" ? "Gemini" : "OpenAI"}.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "AI settings could not be saved."); }
+    finally { setProviderSaving(false); }
+  }
+
+  async function deleteProviderKey(provider: "gemini" | "openai") {
+    if (!window.confirm(`Delete your saved ${provider === "gemini" ? "Gemini" : "OpenAI"} API key?`)) return;
+    setProviderSaving(true);
+    try {
+      const response = await fetch("/api/settings/ai-providers", {
+        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider }),
+      });
+      const data = await response.json() as ProviderStatus & { error?: string };
+      if (!response.ok) throw new Error(data.error || "The key could not be deleted.");
+      setProviderStatus(data); setProviderChoice(data.activeProvider); setNotice("Your saved API key was deleted.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "The key could not be deleted."); }
+    finally { setProviderSaving(false); }
+  }
+
   async function testLogin() {
     setGoogleSigningIn(true);
     setNotice(null);
@@ -278,6 +328,7 @@ export default function Home() {
       if (!response.ok || !data.user) throw new Error(data.error || "Test login could not be completed.");
       setUser(data.user);
       await loadLooks();
+      await loadProviderStatus();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Test login could not be completed.");
     } finally {
@@ -348,11 +399,11 @@ export default function Home() {
       data.append("consent", "photo-processing-v1");
       if (variant.hex) data.append("variantHex", variant.hex);
       const response = await fetch("/api/try-on", { method: "POST", body: data });
-      const payload = await response.json() as { resultUrl?: string; error?: string };
+      const payload = await response.json() as { resultUrl?: string; error?: string; provider?: "gemini" | "openai" };
       if (response.status === 401) { setUser(null); throw new Error("Your session expired. Sign in to continue."); }
       if (!response.ok || !payload.resultUrl) throw new Error(payload.error ?? "No preview was returned.");
       setResultUrl(payload.resultUrl); setGenerated(true); setCompare(52); setSaved(false);
-      setNotice(`${product.name} in ${variant.name} is ready.`);
+      setNotice(`${product.name} in ${variant.name} is ready${payload.provider ? ` with ${payload.provider === "gemini" ? "Gemini" : "OpenAI"}` : ""}.`);
     } catch (error) {
       setGenerated(false);
       setNotice(error instanceof Error ? error.message : "The try-on could not be created.");
@@ -411,7 +462,7 @@ export default function Home() {
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div className="dashboard-brand"><span className="brand-mark">T</span><strong>Try-it-on</strong><span>Dashboard</span></div>
-        <div className="account-summary">{user.picture ? <Image src={user.picture} alt="" width={34} height={34} unoptimized /> : <User size={18} />}<div><strong>{user.name}</strong><span>{user.email}</span></div><a href="/api/auth/logout" aria-label="Sign out"><SignOut size={18} /></a></div>
+        <div className="account-summary">{user.picture ? <Image src={user.picture} alt="" width={34} height={34} unoptimized /> : <User size={18} />}<div><strong>{user.name}</strong><span>{user.email}</span></div><button className="account-action" type="button" onClick={() => { setProviderChoice(providerStatus?.activeProvider ?? "auto"); setProviderKey(""); setProviderSettingsOpen(true); }} aria-label="AI provider settings"><GearSix size={18} /></button><a href="/api/auth/logout" aria-label="Sign out"><SignOut size={18} /></a></div>
       </header>
 
       <div className="dashboard-layout">
@@ -460,6 +511,7 @@ export default function Home() {
 
       <input ref={personInput} className="hidden-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void loadPerson(file); event.target.value = ""; }} />
       <input ref={productInput} className="hidden-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event: ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (file) void loadProduct(file); event.target.value = ""; }} />
+      {providerSettingsOpen && <div className="settings-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProviderSettingsOpen(false); }}><section className="provider-dialog" role="dialog" aria-modal="true" aria-labelledby="provider-title"><button className="dialog-close" type="button" onClick={() => setProviderSettingsOpen(false)} aria-label="Close AI settings"><X size={18} /></button><span className="dialog-icon"><Key size={22} /></span><h2 id="provider-title">AI provider</h2><p>Use the app&apos;s provider or add your own key. Personal keys are encrypted, never shown again, and only used for your try-ons.</p><label className="provider-select-label">Provider<select value={providerChoice} onChange={(event) => { setProviderChoice(event.target.value as ProviderChoice); setProviderKey(""); }}><option value="auto">Auto — best available</option><option value="gemini">Google Gemini</option><option value="openai">OpenAI Image</option></select></label>{providerChoice !== "auto" && <label className="provider-key-label">New API key <span>optional if already configured</span><input type="password" autoComplete="off" value={providerKey} onChange={(event) => setProviderKey(event.target.value)} placeholder={`Paste a new ${providerChoice === "gemini" ? "Gemini" : "OpenAI"} API key`} /></label>}<div className="provider-status-list">{(["gemini", "openai"] as const).map((provider) => { const status = providerStatus?.providers[provider]; return <div key={provider}><span><strong>{provider === "gemini" ? "Gemini" : "OpenAI"}</strong><small>{status?.model ?? "Not loaded"}</small></span><span className={status?.accountConfigured || status?.platformConfigured ? "status-ready" : "status-missing"}>{status?.accountConfigured ? "Your key" : status?.platformConfigured ? "App key" : "Not configured"}</span>{status?.accountConfigured && <button type="button" onClick={() => void deleteProviderKey(provider)} disabled={providerSaving}>Delete</button>}</div>; })}</div><p className="provider-cost-note">Requests made with your key are billed by that provider to your account.</p><div className="dialog-actions"><button type="button" className="dialog-secondary" onClick={() => setProviderSettingsOpen(false)}>Cancel</button><button type="button" className="dialog-primary" onClick={() => void saveProviderSettings()} disabled={providerSaving}>{providerSaving ? "Saving…" : "Save settings"}</button></div></section></div>}
       {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice(null)} aria-label="Dismiss"><X size={17} /></button></div>}
     </main>
   );
